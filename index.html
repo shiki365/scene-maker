@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>シーンメーカー | ココフォリア</title>
+<meta name="description" content="背景の画像をまとめて入れると、ココフォリアのシーンを一括で作ります。全シーンに同じ前景（枠）を付けたり、5MB を超える画像を縮小したりして、ルームデータ（ZIP）で書き出せます。">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="シーンメーカー">
+<meta property="og:title" content="シーンメーカー">
+<meta property="og:description" content="背景の画像をまとめて入れるだけで、ココフォリアのシーンを一括で作れます。同じ前景（枠）を全シーンに、5MB 超えは縮小。ルームデータ（ZIP）を読み込むだけ。無料・登録不要。">
+<meta property="og:url" content="https://shiki365.github.io/scene-maker/">
+<meta property="og:image" content="https://shiki365.github.io/scene-maker/ogp.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="シーンメーカー － 背景の画像を入れるだけで、ココフォリアのシーンをまとめて作成">
+<meta property="og:locale" content="ja_JP">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #15161a; --panel: #1e1f26; --line: #303240; --line-soft: #282a36;
+    --fg: #e7e7ea; --muted: #9a9aa5; --accent: #6b70ff; --warn: #ffb86b;
+    --button: #575cf5; /* darker than --accent so white text passes 4.5:1 */
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font-family: "Yu Gothic UI", "Meiryo", system-ui, sans-serif; font-size: 13px; }
+  header { padding: 18px 24px 14px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0 0 4px; font-size: 17px; }
+  header p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
+  main { display: grid; gap: 20px; padding: 20px 24px 40px;
+         grid-template-columns: minmax(300px, 400px) minmax(0, 1fr); align-items: start; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  @media (max-width: 480px) { header, main, footer { padding-left: 16px; padding-right: 16px; } }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px 16px 16px; min-width: 0; }
+  h2 { margin: 14px 0 0; font-size: 13px; }
+  fieldset { border: 0; border-top: 1px solid var(--line-soft); margin: 14px 0 0; padding: 12px 0 0; min-width: 0; }
+  .panel > fieldset:first-child { border-top: 0; }
+  legend { padding: 0; color: var(--muted); font-size: 11px; letter-spacing: .08em; }
+  .row { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: center; margin-top: 10px; }
+  .row > label:first-child { color: var(--muted); }
+  .inline { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+  .inline select { flex: 1 1 8em; width: auto; min-width: 0; }
+
+  select, input[type=text], input[type=number], textarea {
+    width: 100%; background: #14151b; color: var(--fg); font: inherit;
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+  input[type=number] { width: 5.5em; }
+  input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 15px; height: 15px; vertical-align: -3px; }
+  select:focus-visible, input:focus-visible, textarea:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 1px; }
+  .desc { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
+  .desc b { color: var(--fg); }
+  .check { color: var(--fg); cursor: pointer; }
+
+  button { background: #2f3140; color: var(--fg); border: 1px solid #464a5e;
+           border-radius: 6px; padding: 7px 14px; font: inherit; cursor: pointer; }
+  button:hover { background: #3a3d4f; }
+  button.primary { background: var(--button); border-color: var(--button); color: #fff; font-weight: 700; }
+  button.primary:hover { background: #4a4fe0; }
+  button.small { padding: 4px 9px; font-size: 12px; }
+  button.danger:hover { background: #5a2f36; border-color: #8a4a55; }
+  button:disabled { opacity: .45; cursor: default; }
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  /* image shelf */
+  .drop { margin-top: 10px; border: 1.5px dashed #464a5e; border-radius: 8px; padding: 18px 12px; text-align: center;
+          color: var(--muted); font-size: 12px; line-height: 1.7; cursor: pointer; }
+  .drop b { color: var(--fg); }
+  .drop span { font-size: 11px; }
+  .drop.sub { padding: 10px 12px; }
+  .drop:hover, .drop.over { border-color: var(--accent); color: var(--fg); background: #22243a; }
+  .drop:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; margin-top: 10px; }
+  .gallery .desc { grid-column: 1 / -1; margin: 0; }
+  .imgcell { display: grid; gap: 4px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: #191a21; min-width: 0; align-content: start; }
+  .imgcell img, .imgcell .noimg { width: 100%; height: 64px; object-fit: contain; border-radius: 4px;
+          background: repeating-conic-gradient(#1f2029 0% 25%, #16171d 0% 50%) 50% / 12px 12px; }
+  .imgcell .noimg { display: grid; place-items: center; color: var(--warn); font-size: 11px; }
+  .imgcell input[type=text] { padding: 2px 5px; font-size: 11px; }
+  .imgcell .info { color: var(--muted); font-size: 10px; line-height: 1.5; }
+  .imgcell .info.warn { color: var(--warn); }
+
+  /* scenes */
+  .stack { display: grid; gap: 14px; min-width: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 10px; min-width: 0; }
+  .card > h2, .card-head h2 { margin: 0; font-size: 13px; }
+  .card-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+  .cols { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 14px; align-items: start; }
+  @media (max-width: 1100px) { .cols { grid-template-columns: 1fr; } }
+
+  /* The list is drawn like CCFOLIA's scene list (1.37.4): a 60 x 52 thumbnail, the underlined
+     13 px title, a 12 px caption for the BGM. */
+  .scene-list { max-height: 460px; overflow: auto; background: #212121; border-radius: 4px; padding: 1px; min-height: 56px; }
+  .scene { display: flex; align-items: center; margin: 1px; background: #2a2a2a; color: #fff; cursor: pointer;
+           box-shadow: 0 2px 1px -1px rgba(0,0,0,.2), 0 1px 1px rgba(0,0,0,.14), 0 1px 3px rgba(0,0,0,.12); }
+  .scene[aria-selected=true] { outline: 1px solid #fff; }
+  .scene.over { box-shadow: 0 -2px 0 var(--accent); }
+  .scene .pic { width: 60px; height: 52px; flex: none; background: #000 50% / cover no-repeat; }
+  .scene .txt { flex: 1 1 auto; width: 1px; padding: 6px 4px 6px 12px; display: flex; flex-direction: column; }
+  .scene .ttl { font-size: 13px; line-height: 1.6; text-decoration: underline; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .scene .cap { font-size: 12px; line-height: 1.4; color: rgba(255,255,255,.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .scene .mv { display: flex; flex: none; padding-right: 4px; }
+  .scene .mv button { background: none; border: 0; color: rgba(255,255,255,.7); padding: 4px 5px; font-size: 12px; }
+  .scene .mv button:hover:not(:disabled) { color: #fff; background: rgba(255,255,255,.08); }
+  .empty-list { color: var(--muted); padding: 16px; text-align: center; font-size: 12px; }
+
+  /* board preview */
+  .stage { position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); height: 300px; background: #2a2a2a;
+           display: grid; place-items: center; }
+  .board { position: relative; outline: 4px solid rgba(0,0,0,.2); }
+  .board img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
+  .board .grid { position: absolute; inset: 0; pointer-events: none; }
+  .board .blank { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255,255,255,.4); font-size: 12px; }
+  .stage-note { color: var(--muted); font-size: 11px; margin: 0; }
+
+  .editor { display: grid; gap: 8px; min-width: 0; }
+  .editor label.f { display: grid; gap: 2px; color: var(--muted); font-size: 11px; min-width: 0; }
+  .editor .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .editor textarea { min-height: 54px; resize: vertical; line-height: 1.6; }
+  .editor .warnline { color: var(--warn); font-size: 11px; line-height: 1.6; }
+  @media (max-width: 560px) { .editor .two { grid-template-columns: 1fr; } }
+
+  .mode { display: grid; gap: 6px; }
+  .mode label { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 6px; align-items: start; padding: 8px 10px;
+                border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: #191a21; }
+  .mode label:has(input:checked) { border-color: var(--accent); background: #22243a; }
+  .mode input { margin: 2px 0 0; }
+  .mode b { display: block; color: var(--fg); }
+  .mode span { color: var(--muted); font-size: 12px; line-height: 1.6; }
+
+  .summary { color: var(--muted); font-size: 12px; margin: 0; line-height: 1.7; }
+  .summary b { color: var(--fg); }
+  .summary .warn { color: var(--warn); }
+  .status { color: var(--muted); font-size: 12px; min-height: 1.4em; margin: 0; line-height: 1.6; }
+  .status.error { color: #ff8f8f; }
+
+  .note { color: var(--muted); font-size: 12px; line-height: 1.8; margin: 0; }
+  .note h2 { font-size: 13px; color: var(--fg); margin: 16px 0 6px; }
+  .note ol, .note ul { margin: 6px 0; padding-left: 1.4em; }
+  .note b { color: var(--fg); }
+  .note a { color: #a8abff; }
+  .note .warn { color: var(--warn); }
+  footer { border-top: 1px solid var(--line); padding: 16px 24px 40px; color: var(--muted); font-size: 12px; line-height: 1.9; }
+  footer a { color: #a8abff; }
+  .home-link { display: inline-block; margin-bottom: 4px; color: var(--muted); font-size: 12px; text-decoration: none; }
+  .home-link:hover { color: var(--fg); text-decoration: underline; }
+  .home-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="home-link" href="https://shiki365.github.io/">‹ shiki365 のツール置き場</a>
+  <h1>シーンメーカー</h1>
+  <p>背景の画像をまとめて入れると、ココフォリアの「シーン」を一括で作ります。全シーンに同じ前景（枠）を付ける、フィールドの大きさを画像の形に合わせる、5MB を超える画像を縮小する、までを済ませて、ルームデータ（ZIP）で書き出します。ココフォリアで読み込むだけで、シーン一覧に並びます。すべてブラウザの中だけで処理され、入れた画像がどこかに送られることはありません。</p>
+</header>
+
+<main>
+  <div class="panel">
+    <fieldset>
+      <legend>1. 背景の画像を入れる</legend>
+      <div class="drop" id="dropScenes" role="button" tabindex="0"><b>ここに背景の画像をドラッグ＆ドロップ</b>／クリックして選ぶ（何枚でも）<br><span>1 枚が 1 シーンになります　PNG・JPEG・GIF・WebP（動く WebP・APNG も可）</span></div>
+      <div class="drop sub" id="dropShelf" role="button" tabindex="0">前景（枠など）は、こちらに入れる<br><span>置き場に入るだけで、シーンは増えません</span></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>画像の置き場（<span id="imageCount">0</span> 枚）</legend>
+      <div class="gallery" id="gallery"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>2. まとめて設定</legend>
+      <div class="row"><label for="commonFg">共通の前景</label>
+        <div class="inline"><select id="commonFg"></select><button type="button" class="small" id="commonFgAdd" aria-label="共通の前景にファイルから画像を追加">＋ 画像</button></div></div>
+      <p class="desc">前景が「共通の前景」になっているシーン（最初はすべて）に、同じ枠が付きます。<a href="https://shiki365.github.io/foreground-frame-maker/" style="color:#a8abff">前景フレームメーカー</a>で作った PNG がそのまま使えます。</p>
+      <div class="btns" style="margin-top: 8px;"><button type="button" class="small" id="allFgCommon">全シーンの前景を「共通の前景」に戻す</button></div>
+
+      <div class="row"><label for="defLongSide">大きさ</label>
+        <div class="inline">長い辺を <input type="number" id="defLongSide" min="1" max="1000" step="1" aria-label="長い辺のマス数"> マスに <button type="button" class="small" id="allSize">全シーンを背景の形に合わせる</button></div></div>
+      <div class="row"><label>グリッド</label>
+        <div class="inline"><label class="check"><input type="checkbox" id="defGrid"> 表示する</label>　<input type="number" id="defGridSize" min="1" max="1000" step="1" aria-label="グリッドの間隔（マス）"> マスごと <button type="button" class="small" id="allGrid">全シーンに</button></div></div>
+      <div class="row"><label for="defFit">画像のはめ方</label>
+        <div class="inline"><select id="defFit"><option value="fill">フィールドに合わせて伸ばす（標準）</option><option value="cover">形を保って、はみ出しを切る</option></select><button type="button" class="small" id="allFit">全シーンに</button></div></div>
+      <p class="desc">ここの値は、これから追加するシーンの最初の値にもなります。フィールドの大きさの単位はマスで、ココフォリアの盤面では <b>1 マス = 24px</b> です（48 × 27 マス = 1152 × 648px）。</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>保存</legend>
+      <div class="btns">
+        <button type="button" class="small" id="undo" disabled>元に戻す</button>
+        <button type="button" class="small" id="redo" disabled>やり直す</button>
+      </div>
+      <div class="btns" style="margin-top: 6px;">
+        <button type="button" class="small" id="saveProject">プロジェクトを保存</button>
+        <button type="button" class="small" id="loadProject">プロジェクトを開く</button>
+        <button type="button" class="small danger" id="resetAll">最初に戻す</button>
+      </div>
+      <p class="desc">作業内容と置き場の画像は、このブラウザに自動で保存されます。別の PC やブラウザに移すとき、あとで直したくなりそうなときは「プロジェクトを保存」を使ってください（画像もファイルに入ります）。</p>
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+    </fieldset>
+  </div>
+
+  <div class="stack">
+    <section class="card">
+      <div class="card-head">
+        <h2>3. シーン（<span id="count">0</span> 件）</h2>
+        <div class="btns"><button type="button" class="small" id="addEmpty">＋ 空のシーン</button><button type="button" class="small" id="namesFromFiles">名前を画像の名前にそろえる</button></div>
+      </div>
+      <div class="cols">
+        <div>
+          <div class="scene-list" id="sceneList" role="listbox" aria-label="シーン一覧（ココフォリアのシーン一覧の見本）"></div>
+          <p class="stage-note" style="margin-top: 6px;">ココフォリアのシーン一覧に近い見え方です。ココフォリアでは、前景のあるシーンの小さい絵は<b style="color: var(--fg);">前景だけ</b>になります（ここでは見分けやすいよう背景も重ねています）。ドラッグか ↑↓ で並べ替え。</p>
+        </div>
+        <div class="editor" id="editor" hidden>
+          <div class="stage" id="stage" aria-label="盤面の見本"><div class="board" id="board"></div></div>
+          <p class="stage-note" id="stageNote"></p>
+          <div class="two">
+            <label class="f">シーンタイトル<input type="text" id="edName" placeholder="空なら「新しいシーン」と出ます"></label>
+            <label class="f">画像のはめ方<select id="edFit"><option value="fill">フィールドに合わせて伸ばす（標準）</option><option value="cover">形を保って、はみ出しを切る</option></select></label>
+            <label class="f">背景<span class="inline"><select id="edBg"></select><button type="button" class="small" id="edBgAdd" aria-label="このシーンの背景にファイルから画像を追加">＋ 画像</button></span></label>
+            <label class="f">前景<span class="inline"><select id="edFg"></select><button type="button" class="small" id="edFgAdd" aria-label="このシーンの前景にファイルから画像を追加">＋ 画像</button></span></label>
+          </div>
+          <div class="inline">フィールド 横 <input type="number" id="edWidth" min="1" max="1000" step="1" aria-label="フィールドの横のマス数"> × 縦 <input type="number" id="edHeight" min="1" max="1000" step="1" aria-label="フィールドの縦のマス数"> マス
+            <button type="button" class="small" id="edSizeAuto">背景の形に合わせる</button></div>
+          <div class="inline"><label class="check"><input type="checkbox" id="edGrid"> グリッドを表示</label>　<input type="number" id="edGridSize" min="1" max="1000" step="1" aria-label="グリッドの間隔（マス）"> マスごと</div>
+          <label class="f">シーン切替メッセージ（空でよい。入れると、シーンを反映したときにシーンタイトルの名前でメインに発言されます）<textarea id="edText"></textarea></label>
+          <div class="warnline" id="edWarn" hidden></div>
+          <div class="btns">
+            <button type="button" class="small" id="edDup">複製</button>
+            <button type="button" class="small danger" id="edDelete">このシーンを削除</button>
+          </div>
+        </div>
+        <p class="desc" id="editorEmpty" style="margin: 0;">左の「1. 背景の画像を入れる」に画像をドロップすると、ここにシーンが並びます。一覧で選ぶと、盤面の見本と手直しの欄が出ます。</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>4. 書き出し</h2>
+      <div class="mode" role="radiogroup" aria-label="読み込んだときの動き">
+        <label><input type="radio" name="exportMode" value="add"><span><b>新しいシーンとして追加する</b>読み込むたびに、シーン一覧の最後に足されます。はじめて入れるときはこちら。</span></label>
+        <label><input type="radio" name="exportMode" value="overwrite"><span><b>前に入れたシーンを上書きする（手直し用）</b>前にこのツールで書き出して読み込んだシーンを、同じ場所で置き換えます（まだ無いシーンは追加）。<span class="warn" style="color: var(--warn);">置き換わったシーンは、ココフォリアで付けた BGM・マーカーパネルも消えます。</span></span></label>
+      </div>
+      <label class="check"><input type="checkbox" id="optShrink"> 5MB を超える静止画は、縮小して書き出す（動く画像は縮小しません）</label>
+      <p class="summary" id="exportSummary"></p>
+      <div class="btns">
+        <button type="button" class="primary" id="exportZip" disabled>ルームデータ（ZIP）を書き出す</button>
+        <button type="button" id="exportAssets" disabled>素材（ZIP）を書き出す</button>
+      </div>
+      <p class="desc" style="margin: 0;"><b>素材（ZIP）</b>は、使った画像を「背景」「前景」のフォルダに分けて、分かる名前で入れたものです。ルームデータを読み込んでも、画像はココフォリアの<b>画像選択の一覧（自分の素材）には入りません</b>。あとで盤面を直すときに素材として選びたい場合は、展開して、ココフォリアの画像選択の画面（背景・前景のタブ）にまとめてドロップしてください。縮小した画像は、縮小後のものが入ります。</p>
+      <p class="status" id="exportStatus" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="card">
+      <div class="note">
+        <h2 style="margin-top: 0;">ココフォリアでの読み込みかた</h2>
+        <ol>
+          <li>ルームに <b>GM（ルームマスター・サブルームマスター）</b>として入る。ゲストのログインでは読み込めません</li>
+          <li>左上のルーム名 →「ルーム設定」→「ルームデータ」→「ルームデータのインポート」の「インポート」で、書き出した ZIP を選ぶ（盤面に ZIP をドラッグ＆ドロップしても読み込めます）</li>
+          <li>「外部ツールで作成および編集されたデータです。信頼できるデータのみ取り込むようにしてください。」と出るので、このツールで作ったものなら OK。<b>このツールのデータは、いつもこの確認が出ます</b></li>
+          <li>上のメニューの「シーン一覧」に並んでいます。<b>読み込んだだけでは、今の盤面は変わりません</b>。使うときに、シーンの左の小さい絵を押すと盤面に反映されます</li>
+        </ol>
+        <h2>知っておいてほしいこと</h2>
+        <ul>
+          <li><b>BGM・効果音は入れられません</b>（ルームデータに音声を入れる場所が無いため）。読み込んだあと、ココフォリアで盤面に BGM を付けて、シーンの「盤面を保存」を押してください</li>
+          <li>「上書き」で読み込み直すと、そのシーンにココフォリアで付けた BGM やマーカーパネルは消えます。BGM を付けたあとの手直しは、ココフォリアの中でするのがおすすめです</li>
+          <li>画像は 1 枚 5MB までです。超えると、ココフォリアに上がらないことがあります。静止画は縮小して書き出せます。動く画像（動く WebP・APNG・GIF）は、作ったツールで軽くしてください</li>
+          <li>画像は読み込んだときにココフォリアへアップロードされます（ルームデータの画像と同じ共有の置き場）。<b>ほかの人の素材を使うときは、その素材の利用規約の範囲で</b></li>
+          <li>置き場の画像は、このブラウザの中にだけ保存されます（ブラウザのサイトデータを消すと消えます）。大事なものは「プロジェクトを保存」でファイルにも残してください</li>
+          <li>自分で作ったルームで使ってください。購入したシナリオ（CCFOLIA GAMES など）のルームデータは、改変が禁止されています。このツールは、ルームデータを読み込んで書き換えることはしません</li>
+          <li class="warn">ココフォリアの非公式のツールです（CCFOLIA 1.37.4 のデータの形で作っています）。ココフォリアのアップデートで、読み込めなくなることがあります</li>
+        </ul>
+        <h2>素材を作るなら</h2>
+        <p>全シーンに付ける枠は<a href="https://shiki365.github.io/foreground-frame-maker/">前景フレームメーカー</a>、場面転換の動く素材は<a href="https://shiki365.github.io/scene-transition-maker/">場面転換素材メーカー</a>で作れます。</p>
+      </div>
+    </section>
+  </div>
+</main>
+
+<input type="file" id="projectFile" accept=".json,application/json" hidden>
+<input type="file" id="imageFile" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+<input type="file" id="sceneFiles" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
+<input type="file" id="shelfFiles" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
+
+<footer>
+  ブラウザだけで動く無料ツールです。作ったデータは自由に使えます。<br>
+  ココフォリアのデータの形が変わると、読み込めなくなることがあります。いずれのサービスとも関係のない<strong>非公式</strong>のツールです。<br>
+  <a href="https://shiki365.github.io/">ほかのツールも見る（shiki365 のツール置き場）</a> ・ <a href="https://shiki365.github.io/#contact">不具合の報告・感想</a> ・ <a href="https://marshmallow-qa.com/jisg2c3imbza76d">ほしいツールの要望（マシュマロ）</a> ・ <a href="https://sabunomisogi.booth.pm/items/8891048">開発を応援する（BOOTH）</a><br>
+  v1.0 ・ 最終更新 2026-10-02
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="roomdata.v1.js?v=1"></script>
+<script src="model.v1.js?v=1"></script>
+<script src="app.v1.js?v=3"></script>
+</body>
+</html>
