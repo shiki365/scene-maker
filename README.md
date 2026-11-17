@@ -20,6 +20,7 @@
 - 元に戻す / やり直す（最大 150 歩、Ctrl+Z / Ctrl+Y）、自動保存（設定は localStorage、画像は IndexedDB）、プロジェクトファイル（画像も入る）
 - BGM・効果音は扱わない（ルームデータに音声を入れる場所が無いため）。ルームデータを読み込んで書き換える機能も無い
 - 画面は日本語・英語・韓国語（`?lang=ja` / `en` / `ko`。ツール置き場とほかのツールで選んだ言語を覚えている）
+- 見た目はツール置き場と共通のデザイン「緑青」。ダーク・ライトを右上の「自動 / ダーク / ライト」で切り替える（自動はパソコンやスマホの設定に合わせる）
 
 ## ファイル
 
@@ -33,8 +34,11 @@
 | `app.v1.js` | 画面の結線、画像の置き場、縮小、書き出し |
 | `i18n.v1.js` | 日本語・英語・韓国語の切り替え（全ツール共通の同じファイル。元はツール置き場のリポジトリ） … `window.I18n` |
 | `lang.en.v1.js` / `lang.ko.v1.js` | 英語・韓国語の辞書。キーは画面と JS の日本語の文そのもの |
+| `theme.v1.js` | ダーク・ライトの切り替え（全ツール共通の同じファイル。元はツール置き場のリポジトリ） |
 
 JS を直したら、`index.html` の `?v=` の番号とフッターの版を上げる。
+
+`index.html` の `<style>` の前半は、ツール置き場のリポジトリの `_dev/design/tool.css` と同じ（変えない）。後半の「This tool only」は `_dev/design/tool-only/scene-maker.css` と同じ。見た目を直すときは、そちらを直して `node _dev/design/apply.js ../kokofolia-scenes --extra _dev/design/tool-only/scene-maker.css` で入れ直す（決まりは `_dev/design/README.md`）。色は直書きせず変数で書き、ライトの値も決める（ココフォリアの再現のシーン一覧・盤面の見本と、透明な画像の下の市松は、どちらの明るさでも同じ色）。カード画像（`ogp.png`）と置き場の絵は `node media/make-ogp.js`（手元の Edge。置き場の `_dev/design/ogp/make-ogp.js` と同じ見た目）。
 
 画面や JS の日本語を変えたら、辞書のキーも直す。漏れはツール置き場のリポジトリの `node _dev/i18n-check.js <このフォルダ>` で分かる（ブラウザでは `?lang=en` で開いて `I18n.missing`）。辞書は、このツールだけの訳（手元の `media/i18n-new.js`。公開しない）と、ほかのツールの辞書にある訳を、`_dev/i18n-compose.js` で組み立てたもの（コマンドは `media/i18n-new.js` の冒頭）。3 言語の操作の確かめは、ローカルで開いたページで `(await import("/media/ui-test.js?" + Date.now())).run()`（訳の漏れ・画面に残った日本語・素材 ZIP のフォルダ名を返す）。ココフォリアの用語は、本体の英語・韓国語の表示に合わせている（`_dev/ccf-terms.js` で引ける。例: シーン＝Scenes／장면、前景＝Foreground／전경、画像を自動トリミングする＝Clip image to fit）。
 
