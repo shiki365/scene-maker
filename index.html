@@ -1,7 +1,10 @@
 <!doctype html>
-<html lang="ja">
+<html lang="ja" data-langs="ja en ko">
 <head>
 <meta charset="utf-8">
+<script src="i18n.v1.js"></script>
+<script src="lang.en.v1.js"></script>
+<script src="lang.ko.v1.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>シーンメーカー | ココフォリア</title>
 <meta name="description" content="背景の画像をまとめて入れると、ココフォリアのシーンを一括で作ります。全シーンに同じ前景（枠）を付けたり、5MB を超える画像を縮小したりして、ルームデータ（ZIP）で書き出せます。">
@@ -45,6 +48,7 @@
   .row > label:first-child { color: var(--muted); }
   .inline { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
   .inline select { flex: 1 1 8em; width: auto; min-width: 0; }
+  .grp { display: inline-flex; align-items: center; gap: 6px; } /* a label, its number and unit wrap together */
 
   select, input[type=text], input[type=number], textarea {
     width: 100%; background: #14151b; color: var(--fg); font: inherit;
@@ -55,6 +59,7 @@
     outline: 2px solid var(--accent); outline-offset: 1px; }
   .desc { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
   .desc b { color: var(--fg); }
+  .desc a { color: #a8abff; }
   .check { color: var(--fg); cursor: pointer; }
 
   button { background: #2f3140; color: var(--fg); border: 1px solid #464a5e;
@@ -117,9 +122,11 @@
   .board .grid { position: absolute; inset: 0; pointer-events: none; }
   .board .blank { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255,255,255,.4); font-size: 12px; }
   .stage-note { color: var(--muted); font-size: 11px; margin: 0; }
+  .stage-note b { color: var(--fg); }
 
   .editor { display: grid; gap: 8px; min-width: 0; }
-  .editor label.f { display: grid; gap: 2px; color: var(--muted); font-size: 11px; min-width: 0; }
+  .editor .f { display: grid; gap: 2px; color: var(--muted); font-size: 11px; min-width: 0; }
+  .editor .f .inline { color: var(--fg); font-size: 13px; }
   .editor .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .editor textarea { min-height: 54px; resize: vertical; line-height: 1.6; }
   .editor .warnline { color: var(--warn); font-size: 11px; line-height: 1.6; }
@@ -132,6 +139,7 @@
   .mode input { margin: 2px 0 0; }
   .mode b { display: block; color: var(--fg); }
   .mode span { color: var(--muted); font-size: 12px; line-height: 1.6; }
+  .mode .warn { color: var(--warn); }
 
   .summary { color: var(--muted); font-size: 12px; margin: 0; line-height: 1.7; }
   .summary b { color: var(--fg); }
@@ -147,7 +155,11 @@
   .note .warn { color: var(--warn); }
   footer { border-top: 1px solid var(--line); padding: 16px 24px 40px; color: var(--muted); font-size: 12px; line-height: 1.9; }
   footer a { color: #a8abff; }
-  .home-link { display: inline-block; margin-bottom: 4px; color: var(--muted); font-size: 12px; text-decoration: none; }
+  .topline { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 16px; margin-bottom: 4px; }
+  .lang-switch { margin: 0; color: var(--muted); font-size: 12px; }
+  .lang-switch a { color: #a8abff; }
+  .lang-switch a[aria-current] { color: var(--fg); font-weight: 700; text-decoration: none; }
+  .home-link { display: inline-block; color: var(--muted); font-size: 12px; text-decoration: none; }
   .home-link:hover { color: var(--fg); text-decoration: underline; }
   .home-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>
@@ -155,7 +167,10 @@
 <body>
 
 <header>
-  <a class="home-link" href="https://shiki365.github.io/">‹ shiki365 のツール置き場</a>
+  <div class="topline">
+    <a class="home-link" href="https://shiki365.github.io/">‹ shiki365 のツール置き場</a>
+    <p class="lang-switch" data-lang-switch></p>
+  </div>
   <h1>シーンメーカー</h1>
   <p>背景の画像をまとめて入れると、ココフォリアの「シーン」を一括で作ります。全シーンに同じ前景（枠）を付ける、フィールドの大きさを画像の形に合わせる、5MB を超える画像を縮小する、までを済ませて、ルームデータ（ZIP）で書き出します。ココフォリアで読み込むだけで、シーン一覧に並びます。すべてブラウザの中だけで処理され、入れた画像がどこかに送られることはありません。</p>
 </header>
@@ -164,8 +179,8 @@
   <div class="panel">
     <fieldset>
       <legend>1. 背景の画像を入れる</legend>
-      <div class="drop" id="dropScenes" role="button" tabindex="0"><b>ここに背景の画像をドラッグ＆ドロップ</b>／クリックして選ぶ（何枚でも）<br><span>1 枚が 1 シーンになります　PNG・JPEG・GIF・WebP（動く WebP・APNG も可）</span></div>
-      <div class="drop sub" id="dropShelf" role="button" tabindex="0">前景（枠など）は、こちらに入れる<br><span>置き場に入るだけで、シーンは増えません</span></div>
+      <div class="drop" id="dropScenes" role="button" tabindex="0" data-i18n><b>ここに背景の画像をドラッグ＆ドロップ</b>／クリックして選ぶ（何枚でも）<br><span>1 枚が 1 シーンになります　PNG・JPEG・GIF・WebP（動く WebP・APNG も可）</span></div>
+      <div class="drop sub" id="dropShelf" role="button" tabindex="0" data-i18n>前景（枠など）は、こちらに入れる<br><span>置き場に入るだけで、シーンは増えません</span></div>
     </fieldset>
 
     <fieldset>
@@ -177,16 +192,16 @@
       <legend>2. まとめて設定</legend>
       <div class="row"><label for="commonFg">共通の前景</label>
         <div class="inline"><select id="commonFg"></select><button type="button" class="small" id="commonFgAdd" aria-label="共通の前景にファイルから画像を追加">＋ 画像</button></div></div>
-      <p class="desc">前景が「共通の前景」になっているシーン（最初はすべて）に、同じ枠が付きます。<a href="https://shiki365.github.io/foreground-frame-maker/" style="color:#a8abff">前景フレームメーカー</a>で作った PNG がそのまま使えます。</p>
+      <p class="desc" data-i18n>前景が「共通の前景」になっているシーン（最初はすべて）に、同じ枠が付きます。<a href="https://shiki365.github.io/foreground-frame-maker/">前景フレームメーカー</a>で作った PNG がそのまま使えます。</p>
       <div class="btns" style="margin-top: 8px;"><button type="button" class="small" id="allFgCommon">全シーンの前景を「共通の前景」に戻す</button></div>
 
       <div class="row"><label for="defLongSide">大きさ</label>
         <div class="inline">長い辺を <input type="number" id="defLongSide" min="1" max="1000" step="1" aria-label="長い辺のマス数"> マスに <button type="button" class="small" id="allSize">全シーンを背景の形に合わせる</button></div></div>
       <div class="row"><label>グリッド</label>
-        <div class="inline"><label class="check"><input type="checkbox" id="defGrid"> 表示する</label>　<input type="number" id="defGridSize" min="1" max="1000" step="1" aria-label="グリッドの間隔（マス）"> マスごと <button type="button" class="small" id="allGrid">全シーンに</button></div></div>
+        <div class="inline"><label class="check"><input type="checkbox" id="defGrid"> 表示する</label>　<span class="grp"><span>間隔</span> <input type="number" id="defGridSize" min="1" max="1000" step="1" aria-label="グリッドの間隔（マス）"> <span>マス</span></span> <button type="button" class="small" id="allGrid">全シーンに</button></div></div>
       <div class="row"><label for="defFit">画像のはめ方</label>
         <div class="inline"><select id="defFit"><option value="fill">フィールドに合わせて伸ばす（標準）</option><option value="cover">形を保って、はみ出しを切る</option></select><button type="button" class="small" id="allFit">全シーンに</button></div></div>
-      <p class="desc">ここの値は、これから追加するシーンの最初の値にもなります。フィールドの大きさの単位はマスで、ココフォリアの盤面では <b>1 マス = 24px</b> です（48 × 27 マス = 1152 × 648px）。</p>
+      <p class="desc" data-i18n>ここの値は、これから追加するシーンの最初の値にもなります。フィールドの大きさの単位はマスで、ココフォリアの盤面では <b>1 マス = 24px</b> です（48 × 27 マス = 1152 × 648px）。「形を保って、はみ出しを切る」は、ココフォリアのフィールド設定の「画像を自動トリミングする」と同じです。</p>
     </fieldset>
 
     <fieldset>
@@ -214,7 +229,7 @@
       <div class="cols">
         <div>
           <div class="scene-list" id="sceneList" role="listbox" aria-label="シーン一覧（ココフォリアのシーン一覧の見本）"></div>
-          <p class="stage-note" style="margin-top: 6px;">ココフォリアのシーン一覧に近い見え方です。ココフォリアでは、前景のあるシーンの小さい絵は<b style="color: var(--fg);">前景だけ</b>になります（ここでは見分けやすいよう背景も重ねています）。ドラッグか ↑↓ で並べ替え。</p>
+          <p class="stage-note" style="margin-top: 6px;" data-i18n>ココフォリアのシーン一覧に近い見え方です。ココフォリアでは、前景のあるシーンの小さい絵は<b>前景だけ</b>になります（ここでは見分けやすいよう背景も重ねています）。ドラッグか ↑↓ で並べ替え。</p>
         </div>
         <div class="editor" id="editor" hidden>
           <div class="stage" id="stage" aria-label="盤面の見本"><div class="board" id="board"></div></div>
@@ -225,9 +240,10 @@
             <label class="f">背景<span class="inline"><select id="edBg"></select><button type="button" class="small" id="edBgAdd" aria-label="このシーンの背景にファイルから画像を追加">＋ 画像</button></span></label>
             <label class="f">前景<span class="inline"><select id="edFg"></select><button type="button" class="small" id="edFgAdd" aria-label="このシーンの前景にファイルから画像を追加">＋ 画像</button></span></label>
           </div>
-          <div class="inline">フィールド 横 <input type="number" id="edWidth" min="1" max="1000" step="1" aria-label="フィールドの横のマス数"> × 縦 <input type="number" id="edHeight" min="1" max="1000" step="1" aria-label="フィールドの縦のマス数"> マス
-            <button type="button" class="small" id="edSizeAuto">背景の形に合わせる</button></div>
-          <div class="inline"><label class="check"><input type="checkbox" id="edGrid"> グリッドを表示</label>　<input type="number" id="edGridSize" min="1" max="1000" step="1" aria-label="グリッドの間隔（マス）"> マスごと</div>
+          <div class="f">フィールドの大きさ（マス）
+            <span class="inline"><span>横幅</span> <input type="number" id="edWidth" min="1" max="1000" step="1" aria-label="フィールドの横幅（マス）"> × <span>縦幅</span> <input type="number" id="edHeight" min="1" max="1000" step="1" aria-label="フィールドの縦幅（マス）">
+              <button type="button" class="small" id="edSizeAuto">背景の形に合わせる</button></span></div>
+          <div class="inline"><label class="check"><input type="checkbox" id="edGrid"> グリッドを表示</label>　<span class="grp"><span>間隔</span> <input type="number" id="edGridSize" min="1" max="1000" step="1" aria-label="グリッドの間隔（マス）"> <span>マス</span></span></div>
           <label class="f">シーン切替メッセージ（空でよい。入れると、シーンを反映したときにシーンタイトルの名前でメインに発言されます）<textarea id="edText"></textarea></label>
           <div class="warnline" id="edWarn" hidden></div>
           <div class="btns">
@@ -242,8 +258,8 @@
     <section class="card">
       <h2>4. 書き出し</h2>
       <div class="mode" role="radiogroup" aria-label="読み込んだときの動き">
-        <label><input type="radio" name="exportMode" value="add"><span><b>新しいシーンとして追加する</b>読み込むたびに、シーン一覧の最後に足されます。はじめて入れるときはこちら。</span></label>
-        <label><input type="radio" name="exportMode" value="overwrite"><span><b>前に入れたシーンを上書きする（手直し用）</b>前にこのツールで書き出して読み込んだシーンを、同じ場所で置き換えます（まだ無いシーンは追加）。<span class="warn" style="color: var(--warn);">置き換わったシーンは、ココフォリアで付けた BGM・マーカーパネルも消えます。</span></span></label>
+        <label><input type="radio" name="exportMode" value="add"><span data-i18n><b>新しいシーンとして追加する</b>読み込むたびに、シーン一覧の最後に足されます。はじめて入れるときはこちら。</span></label>
+        <label><input type="radio" name="exportMode" value="overwrite"><span data-i18n><b>前に入れたシーンを上書きする（手直し用）</b>前にこのツールで書き出して読み込んだシーンを、同じ場所で置き換えます（まだ無いシーンは追加）。<span class="warn">置き換わったシーンは、ココフォリアで付けた BGM・マーカーパネルも消えます。</span></span></label>
       </div>
       <label class="check"><input type="checkbox" id="optShrink"> 5MB を超える静止画は、縮小して書き出す（動く画像は縮小しません）</label>
       <p class="summary" id="exportSummary"></p>
@@ -251,7 +267,7 @@
         <button type="button" class="primary" id="exportZip" disabled>ルームデータ（ZIP）を書き出す</button>
         <button type="button" id="exportAssets" disabled>素材（ZIP）を書き出す</button>
       </div>
-      <p class="desc" style="margin: 0;"><b>素材（ZIP）</b>は、使った画像を「背景」「前景」のフォルダに分けて、分かる名前で入れたものです。ルームデータを読み込んでも、画像はココフォリアの<b>画像選択の一覧（自分の素材）には入りません</b>。あとで盤面を直すときに素材として選びたい場合は、展開して、ココフォリアの画像選択の画面（背景・前景のタブ）にまとめてドロップしてください。縮小した画像は、縮小後のものが入ります。</p>
+      <p class="desc" style="margin: 0;" data-i18n><b>素材（ZIP）</b>は、使った画像を「背景」「前景」のフォルダに分けて、分かる名前で入れたものです。ルームデータを読み込んでも、画像はココフォリアの<b>画像選択の一覧（自分の素材）には入りません</b>。あとで盤面を直すときに素材として選びたい場合は、展開して、ココフォリアの画像選択の画面（背景・前景のタブ）にまとめてドロップしてください。縮小した画像は、縮小後のものが入ります。</p>
       <p class="status" id="exportStatus" role="status" aria-live="polite"></p>
     </section>
 
@@ -259,23 +275,23 @@
       <div class="note">
         <h2 style="margin-top: 0;">ココフォリアでの読み込みかた</h2>
         <ol>
-          <li>ルームに <b>GM（ルームマスター・サブルームマスター）</b>として入る。ゲストのログインでは読み込めません</li>
+          <li data-i18n>ルームに <b>GM（ルームマスター・サブルームマスター）</b>として入る。ゲストのログインでは読み込めません</li>
           <li>左上のルーム名 →「ルーム設定」→「ルームデータ」→「ルームデータのインポート」の「インポート」で、書き出した ZIP を選ぶ（盤面に ZIP をドラッグ＆ドロップしても読み込めます）</li>
-          <li>「外部ツールで作成および編集されたデータです。信頼できるデータのみ取り込むようにしてください。」と出るので、このツールで作ったものなら OK。<b>このツールのデータは、いつもこの確認が出ます</b></li>
-          <li>上のメニューの「シーン一覧」に並んでいます。<b>読み込んだだけでは、今の盤面は変わりません</b>。使うときに、シーンの左の小さい絵を押すと盤面に反映されます</li>
+          <li data-i18n>「外部ツールで作成および編集されたデータです。信頼できるデータのみ取り込むようにしてください。」と出るので、このツールで作ったものなら OK。<b>このツールのデータは、いつもこの確認が出ます</b></li>
+          <li data-i18n>上のメニューの「シーン一覧」に並んでいます。<b>読み込んだだけでは、今の盤面は変わりません</b>。使うときに、シーンの左の小さい絵を押すと盤面に反映されます</li>
         </ol>
         <h2>知っておいてほしいこと</h2>
         <ul>
-          <li><b>BGM・効果音は入れられません</b>（ルームデータに音声を入れる場所が無いため）。読み込んだあと、ココフォリアで盤面に BGM を付けて、シーンの「盤面を保存」を押してください</li>
+          <li data-i18n><b>BGM・効果音は入れられません</b>（ルームデータに音声を入れる場所が無いため）。読み込んだあと、ココフォリアで盤面に BGM を付けて、シーンの「盤面を保存」を押してください</li>
           <li>「上書き」で読み込み直すと、そのシーンにココフォリアで付けた BGM やマーカーパネルは消えます。BGM を付けたあとの手直しは、ココフォリアの中でするのがおすすめです</li>
           <li>画像は 1 枚 5MB までです。超えると、ココフォリアに上がらないことがあります。静止画は縮小して書き出せます。動く画像（動く WebP・APNG・GIF）は、作ったツールで軽くしてください</li>
-          <li>画像は読み込んだときにココフォリアへアップロードされます（ルームデータの画像と同じ共有の置き場）。<b>ほかの人の素材を使うときは、その素材の利用規約の範囲で</b></li>
+          <li data-i18n>画像は読み込んだときにココフォリアへアップロードされます（ルームデータの画像と同じ共有の置き場）。<b>ほかの人の素材を使うときは、その素材の利用規約の範囲で</b></li>
           <li>置き場の画像は、このブラウザの中にだけ保存されます（ブラウザのサイトデータを消すと消えます）。大事なものは「プロジェクトを保存」でファイルにも残してください</li>
           <li>自分で作ったルームで使ってください。購入したシナリオ（CCFOLIA GAMES など）のルームデータは、改変が禁止されています。このツールは、ルームデータを読み込んで書き換えることはしません</li>
-          <li class="warn">ココフォリアの非公式のツールです（CCFOLIA 1.37.4 のデータの形で作っています）。ココフォリアのアップデートで、読み込めなくなることがあります</li>
+          <li class="warn">ココフォリアの非公式のツールです（CCFOLIA 1.37.6 のデータの形で作っています）。ココフォリアのアップデートで、読み込めなくなることがあります</li>
         </ul>
         <h2>素材を作るなら</h2>
-        <p>全シーンに付ける枠は<a href="https://shiki365.github.io/foreground-frame-maker/">前景フレームメーカー</a>、場面転換の動く素材は<a href="https://shiki365.github.io/scene-transition-maker/">場面転換素材メーカー</a>で作れます。</p>
+        <p data-i18n>全シーンに付ける枠は<a href="https://shiki365.github.io/foreground-frame-maker/">前景フレームメーカー</a>、場面転換の動く素材は<a href="https://shiki365.github.io/scene-transition-maker/">場面転換素材メーカー</a>で作れます。</p>
       </div>
     </section>
   </div>
@@ -288,14 +304,14 @@
 
 <footer>
   ブラウザだけで動く無料ツールです。作ったデータは自由に使えます。<br>
-  ココフォリアのデータの形が変わると、読み込めなくなることがあります。いずれのサービスとも関係のない<strong>非公式</strong>のツールです。<br>
+  <span data-i18n>ココフォリアのデータの形が変わると、読み込めなくなることがあります。いずれのサービスとも関係のない<strong>非公式</strong>のツールです。</span><br>
   <a href="https://shiki365.github.io/">ほかのツールも見る（shiki365 のツール置き場）</a> ・ <a href="https://shiki365.github.io/#contact">不具合の報告・感想</a> ・ <a href="https://marshmallow-qa.com/jisg2c3imbza76d">ほしいツールの要望（マシュマロ）</a> ・ <a href="https://sabunomisogi.booth.pm/items/8891048">開発を応援する（BOOTH）</a><br>
-  v1.0 ・ 最終更新 2026-10-02
+  <span>v1.0</span> ・ <span>最終更新</span> 2026-10-30
 </footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="roomdata.v1.js?v=1"></script>
-<script src="model.v1.js?v=1"></script>
-<script src="app.v1.js?v=3"></script>
+<script src="roomdata.v1.js?v=2"></script>
+<script src="model.v1.js?v=2"></script>
+<script src="app.v1.js?v=4"></script>
 </body>
 </html>

@@ -1,7 +1,8 @@
 /*!
  * roomdata.v1.js - entities -> CCFOLIA room data zip (no UI, shared by the zip tools)
  *
- * Format read from CCFOLIA 1.37.4 (main.09686af1.js, 2026-10-02):
+ * Format read from CCFOLIA 1.37.4 (main.09686af1.js, 2026-10-02); unchanged in 1.37.6
+ * (main.0f872b7d.js, checked 2026-10-30):
  *   __data.json  {"meta":{"version":"1.1.0"},"entities":{...},"resources":{<file>:{"type":<mime>}}}
  *                entities = { room, items, decks, notes, characters, effects, scenes, savedatas, snapshots }
  *                each kind is { <id>: {...} }; room is one object ({} leaves the room as it is).

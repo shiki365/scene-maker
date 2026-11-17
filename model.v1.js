@@ -10,11 +10,15 @@
  *             sizeAuto: the field size follows the background's shape until typed by hand.
  *   defaults: what a new scene starts with, and what the "全シーンに" buttons copy.
  *
- * The shape of a scene is read from CCFOLIA 1.37.4 (main.09686af1.js, 2026-10-02):
+ * The shape of a scene is read from CCFOLIA 1.37.4 (main.09686af1.js, 2026-10-02), and is the
+ * same in 1.37.6 (main.0f872b7d.js, checked 2026-10-30):
  *   fieldWidth / fieldHeight are in cells, one cell is 24 px; the screen takes 0-1000.
- *   gridSize is how many cells between grid lines (1-1000). fieldObjectFit is "fill" or "cover".
+ *   gridSize is how many cells between grid lines (1-1000). fieldObjectFit is "fill" or "cover"
+ *   ("cover" is the board settings' 画像を自動トリミングする).
  *   The list is ordered by `order`; a scene without it does not show.
  *   The media / sound fields are left as a new scene has them: audio cannot travel in the zip.
+ *   All scenes of a zip are written in one Firestore batch, which used to take at most 500 writes,
+ *   so one zip carries at most MAX_SCENES.
  */
 (function (root) {
   "use strict";
@@ -23,6 +27,7 @@
   const MAX_CELLS = 1000;
   const FITS = ["fill", "cover"];
   const MAX_IMAGE = 5 * 1024 * 1024; // CCFOLIA's upload limit for images
+  const MAX_SCENES = 500;            // writes in one Firestore batch (importRoomScenes uses one)
 
   const uid = p => p + Math.random().toString(36).slice(2, 10);
   const clampInt = (v, min, max, d) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : d; };
@@ -90,5 +95,5 @@
     };
   }
 
-  root.SceneModel = { CELL, MAX_CELLS, FITS, MAX_IMAGE, uid, clampInt, defaultState, normalize, suggestSize, newScene, fgIdOf, toEntity };
+  root.SceneModel = { CELL, MAX_CELLS, FITS, MAX_IMAGE, MAX_SCENES, uid, clampInt, defaultState, normalize, suggestSize, newScene, fgIdOf, toEntity };
 })(typeof window !== "undefined" ? window : globalThis);

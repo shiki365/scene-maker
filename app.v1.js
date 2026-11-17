@@ -10,13 +10,20 @@
  * The ids scenes get in CCFOLIA (scene.ccfId) and state.orderBase are not part of undo: they must
  * stay what the last exported zip had, or "overwrite" would miss the scenes already imported.
  *
- * What CCFOLIA does with the zip is in roomdata.v1.js and model.v1.js (CCFOLIA 1.37.4, 2026-10-02).
+ * What CCFOLIA does with the zip is in roomdata.v1.js and model.v1.js (CCFOLIA 1.37.4, 2026-10-02;
+ * the same in 1.37.6, checked 2026-10-30).
+ *
+ * Every text shown goes through t() (i18n.v1.js; the Japanese text is the key). Numbers and names
+ * are filled in as {n} / {name}, never glued on, since word order differs between languages.
+ * Sentences that are joined end with a space in the English and Korean dictionaries.
  */
 (function () {
   "use strict";
 
   const R = window.CcfRoomData, M = window.SceneModel;
   const $ = sel => document.querySelector(sel);
+  const t = (text, vars) => (window.I18n ? window.I18n.t(text, vars) : text);
+  const listOf = parts => parts.join(t("、"));
 
   const SAVE_KEY = "ccf-scene-maker.state";
   const APP_ID = "ccf-scene-maker";
@@ -69,7 +76,7 @@
     future.push(history.pop());
     restore(history[history.length - 1]);
     syncUndo();
-    status("元に戻しました。");
+    status(t("元に戻しました。"));
   }
   function redo() {
     if (!future.length) return;
@@ -77,7 +84,7 @@
     history.push(snap);
     restore(snap);
     syncUndo();
-    status("やり直しました。");
+    status(t("やり直しました。"));
   }
 
   let saveTimer = 0;
@@ -86,7 +93,7 @@
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify(state));
     } catch (err) {
-      status("ブラウザに自動保存できませんでした。「プロジェクトを保存」でファイルに残してください。", true);
+      status(t("ブラウザに自動保存できませんでした。「プロジェクトを保存」でファイルに残してください。"), true);
     }
   }
   function scheduleSave() {
@@ -121,7 +128,7 @@
     const d = new Date(), p = n => String(n).padStart(2, "0");
     return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
   }
-  const safeName = s => String(s || "").replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/^\.+/, "_").trim() || "画像";
+  const safeName = s => String(s || "").replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/^\.+/, "_").trim() || t("画像");
 
   // ---------------------------------------------------------------- image bytes
 
@@ -154,7 +161,7 @@
       tx.onerror = tx.onabort = () => reject(tx.error || new Error("IndexedDB"));
     });
   }
-  const warnNotStored = () => status("画像をブラウザに保存できませんでした。このページを閉じると消えるので、「プロジェクトを保存」でファイルに残してください。", true);
+  const warnNotStored = () => status(t("画像をブラウザに保存できませんでした。このページを閉じると消えるので、「プロジェクトを保存」でファイルに残してください。"), true);
   function storeBlob(id, blob) {
     if (!db) return Promise.resolve();
     return dbRun("readwrite", s => s.put(blob, id)).then(() => { stored.add(id); }).catch(warnNotStored);
@@ -195,9 +202,9 @@
     if (type === "image/gif") return true; // not worth telling a one-frame gif apart
     if (type === "image/png") {            // APNG: an acTL chunk before the first IDAT
       for (let p = 8; p + 8 <= b.length;) {
-        const t = tag(b, p + 4);
-        if (t === "acTL") return true;
-        if (t === "IDAT") return false;
+        const chunk = tag(b, p + 4);
+        if (chunk === "acTL") return true;
+        if (chunk === "IDAT") return false;
         p += 12 + u32(b, p);
       }
       return false;
@@ -222,7 +229,8 @@
     }
   }
 
-  const baseName = n => String(n || "").replace(/\.[^.]+$/, "") || "画像";
+  // The file name without its extension becomes the image's name (state: kept as typed, never translated).
+  const baseName = n => String(n || "").replace(/\.[^.]+$/, "") || t("画像");
   const blobToDataUrl = blob => new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onload = () => resolve(r.result);
@@ -258,12 +266,12 @@
     }
     const added = ids.length - same;
     const parts = [];
-    if (added) parts.push(`画像を ${added} 枚、置き場に入れました。`);
-    if (added && !db) parts.push("ただし、このブラウザでは画像を保存できないので、閉じる前に「プロジェクトを保存」でファイルに残してください。");
-    if (same) parts.push(`${same} 枚は置き場にある画像と同じなので、それを使います。`);
-    if (bad) parts.push(`${bad} 個は使えない形式でした（PNG・JPEG・GIF・WebP が使えます）。`);
-    if (big) parts.push(`${big} 枚は 5MB を超えています。書き出すときに縮小できます。`);
-    if (bigMoving) parts.push(`動く画像 ${bigMoving} 枚が 5MB を超えています。縮小できないので、作ったツールで軽くしてください。`);
+    if (added) parts.push(t("画像を {n} 枚、置き場に入れました。", { n: added }));
+    if (added && !db) parts.push(t("ただし、このブラウザでは画像を保存できないので、閉じる前に「プロジェクトを保存」でファイルに残してください。"));
+    if (same) parts.push(t("{n} 枚は置き場にある画像と同じなので、それを使います。", { n: same }));
+    if (bad) parts.push(t("{n} 個は使えない形式でした（PNG・JPEG・GIF・WebP が使えます）。", { n: bad }));
+    if (big) parts.push(t("{n} 枚は 5MB を超えています。書き出すときに縮小できます。", { n: big }));
+    if (bigMoving) parts.push(t("動く画像 {n} 枚が 5MB を超えています。縮小できないので、作ったツールで軽くしてください。", { n: bigMoving }));
     if (parts.length) status(parts.join(""), !!(bad || bigMoving || (added && !db)));
     return ids;
   }
@@ -319,7 +327,7 @@
           return out;
         }
       }
-      throw new Error(`「${im.name}」を 5MB 以下に縮小できませんでした。`);
+      throw new Error(t("「{name}」を 5MB 以下に縮小できませんでした。", { name: im.name }));
     } finally { bmp.close(); }
   }
 
@@ -353,7 +361,7 @@
   function fillImageSelect(sel, firsts, current) {
     sel.textContent = "";
     for (const [value, label] of firsts) sel.append(new Option(label, value));
-    for (const im of state.images) sel.append(new Option(im.name || "（名前なし）", im.id));
+    for (const im of state.images) sel.append(new Option(im.name || t("（名前なし）"), im.id));
     sel.value = current;
     if (sel.value !== current) sel.value = firsts[0][0];
   }
@@ -383,10 +391,10 @@
   function removeImage(im) {
     const u = usesOf(im.id);
     const uses = [];
-    if (u.bg) uses.push(`背景に使っているシーン ${u.bg} 件`);
-    if (u.fg) uses.push(`前景に使っているシーン ${u.fg} 件`);
-    if (u.common) uses.push("共通の前景");
-    if (uses.length && !confirm(`「${im.name}」は次の所で使っています。\n${uses.join("\n")}\n\n削除すると、これらは「画像なし」になります。削除しますか？`)) return;
+    if (u.bg) uses.push(t("背景に使っているシーン {n} 件", { n: u.bg }));
+    if (u.fg) uses.push(t("前景に使っているシーン {n} 件", { n: u.fg }));
+    if (u.common) uses.push(t("共通の前景"));
+    if (uses.length && !confirm(t("「{name}」は次の所で使っています。\n{uses}\n\n削除すると、これらは「画像なし」になります。削除しますか？", { name: im.name, uses: uses.join("\n") }))) return;
     for (const s of state.scenes) {
       if (s.bg === im.id) s.bg = null;
       if (s.fg === im.id) s.fg = "none";
@@ -396,7 +404,7 @@
     unstoreBlob(im.id); // the Blob stays in memory, so undo can bring the image back
     touch();
     commit();
-    status(uses.length ? "削除しました。使っていた所は「画像なし」になりました。" : "削除しました。");
+    status(uses.length ? t("削除しました。使っていた所は「画像なし」になりました。") : t("削除しました。"));
   }
 
   // ---------------------------------------------------------------- rendering
@@ -408,7 +416,7 @@
     if (!state.images.length) {
       const p = document.createElement("p");
       p.className = "desc";
-      p.textContent = "まだ画像がありません。";
+      p.textContent = t("まだ画像がありません。");
       box.append(p);
       return;
     }
@@ -417,23 +425,25 @@
       cell.className = "imgcell";
       const src = srcOf(im.id);
       if (src) { const img = document.createElement("img"); img.src = src; img.alt = ""; img.loading = "lazy"; cell.append(img); }
-      else { const d = document.createElement("div"); d.className = "noimg"; d.textContent = "中身なし"; cell.append(d); }
+      else { const d = document.createElement("div"); d.className = "noimg"; d.textContent = t("中身なし"); cell.append(d); }
       const name = document.createElement("input");
       name.type = "text";
       name.value = im.name;
-      name.setAttribute("aria-label", "画像の名前");
+      name.setAttribute("aria-label", t("画像の名前"));
       name.addEventListener("input", () => { im.name = name.value; touch({ keepGallery: true, keepEditorFields: true }); });
       name.addEventListener("change", commit);
       const info = document.createElement("span");
       const warn = missing(im) || tooBig(im);
       info.className = "info" + (warn ? " warn" : "");
-      info.textContent = missing(im) ? "中身が見つかりません。入れ直してください"
-        : `${im.w}×${im.h}・${sizeText(im.size)}` + (im.moving ? "・動く" : "") + (tooBig(im) ? (im.moving ? "（5MB 超・縮小不可）" : "（5MB 超）") : "");
+      const facts = [`${im.w}×${im.h}`, sizeText(im.size)];
+      if (im.moving) facts.push(t("動く"));
+      info.textContent = missing(im) ? t("中身が見つかりません。入れ直してください")
+        : facts.join(t("・")) + (tooBig(im) ? (im.moving ? t("（5MB 超・縮小不可）") : t("（5MB 超）")) : "");
       const btns = document.createElement("div");
       btns.className = "btns";
-      const make = button("シーンに", { aria: `画像「${im.name}」を背景にしたシーンを足す` });
-      make.addEventListener("click", () => { addScenes([im.id]); touch(); commit(); status("シーンを 1 件足しました。"); });
-      const del = button("削除", { danger: true, aria: `画像「${im.name}」を削除` });
+      const make = button(t("シーンに"), { aria: t("画像「{name}」を背景にしたシーンを足す", { name: im.name }) });
+      make.addEventListener("click", () => { addScenes([im.id]); touch(); commit(); status(t("シーンを 1 件足しました。")); });
+      const del = button(t("削除"), { danger: true, aria: t("画像「{name}」を削除", { name: im.name }) });
       del.addEventListener("click", () => removeImage(im));
       btns.append(make, del);
       cell.append(name, info, btns);
@@ -442,7 +452,7 @@
   }
 
   function renderCommon() {
-    fillImageSelect($("#commonFg"), [["", "なし"]], state.commonFg || "");
+    fillImageSelect($("#commonFg"), [["", t("なし")]], state.commonFg || "");
     $("#defLongSide").value = state.defaults.longSide;
     $("#defGrid").checked = state.defaults.displayGrid;
     $("#defGridSize").value = state.defaults.gridSize;
@@ -459,7 +469,7 @@
     if (!state.scenes.length) {
       const d = document.createElement("div");
       d.className = "empty-list";
-      d.textContent = "まだシーンがありません";
+      d.textContent = t("まだシーンがありません");
       box.append(d);
     }
     state.scenes.forEach((sc, i) => {
@@ -479,15 +489,15 @@
       txt.className = "txt";
       const ttl = document.createElement("span");
       ttl.className = "ttl";
-      ttl.textContent = sc.name || "新しいシーン";
+      ttl.textContent = sc.name || t("新しいシーン"); // what CCFOLIA shows for a scene without a title
       const cap = document.createElement("span");
       cap.className = "cap";
       cap.textContent = "-"; // the BGM name; always none here
       txt.append(ttl, cap);
       const mv = document.createElement("div");
       mv.className = "mv";
-      const up = button("↑", { disabled: i === 0, aria: `${i + 1} 番目を上へ` });
-      const down = button("↓", { disabled: i === state.scenes.length - 1, aria: `${i + 1} 番目を下へ` });
+      const up = button("↑", { disabled: i === 0, aria: t("{n} 番目を上へ", { n: i + 1 }) });
+      const down = button("↓", { disabled: i === state.scenes.length - 1, aria: t("{n} 番目を下へ", { n: i + 1 }) });
       up.className = down.className = "";
       up.addEventListener("click", ev => { ev.stopPropagation(); moveScene(i, i - 1); });
       down.addEventListener("click", ev => { ev.stopPropagation(); moveScene(i, i + 1); });
@@ -544,7 +554,7 @@
     if (!bg && !fg) {
       const d = document.createElement("div");
       d.className = "blank";
-      d.textContent = "画像なし";
+      d.textContent = t("画像なし");
       board.append(d);
     }
     if (sc.displayGrid) {
@@ -557,10 +567,12 @@
     }
     const ratio = im => im && im.w && im.h ? Math.abs(im.w / im.h - sc.width / sc.height) / (sc.width / sc.height) : 0;
     const off = [];
-    if (ratio(bg) > 0.05) off.push("背景");
-    if (ratio(fg) > 0.05) off.push("前景");
-    $("#stageNote").textContent = `盤面 ${sc.width} × ${sc.height} マス（${sc.width * M.CELL} × ${sc.height * M.CELL}px）`
-      + (off.length ? `　${off.join("・")}の形がフィールドと違うので、${sc.fit === "cover" ? "はみ出しが切れます" : "伸びて表示されます"}` : "");
+    if (ratio(bg) > 0.05) off.push(t("背景"));
+    if (ratio(fg) > 0.05) off.push(t("前景"));
+    const parts = off.join(t("・"));
+    $("#stageNote").textContent = t("盤面 {w} × {h} マス（{pw} × {ph}px）。", { w: sc.width, h: sc.height, pw: sc.width * M.CELL, ph: sc.height * M.CELL })
+      + (!off.length ? "" : sc.fit === "cover" ? t("{parts}の形がフィールドと違うので、はみ出しが切れます。", { parts })
+        : t("{parts}の形がフィールドと違うので、伸びて表示されます。", { parts }));
   }
 
   function renderEditor(keepFields) {
@@ -577,16 +589,17 @@
     }
     $("#edFit").value = sc.fit;
     $("#edGrid").checked = sc.displayGrid;
-    fillImageSelect($("#edBg"), [["", "画像なし"]], sc.bg || "");
+    fillImageSelect($("#edBg"), [["", t("画像なし")]], sc.bg || "");
     const common = imageById(state.commonFg);
-    fillImageSelect($("#edFg"), [["common", `共通の前景（${common ? common.name : "なし"}）`], ["none", "前景なし"]], sc.fg);
+    fillImageSelect($("#edFg"), [["common", t("共通の前景（{name}）", { name: common ? common.name : t("なし") })], ["none", t("前景なし")]], sc.fg);
     const warns = [];
     for (const im of new Set([bgOf(sc), fgOf(sc)])) {
       if (!im) continue;
-      if (missing(im)) warns.push(`「${im.name}」の中身が見つかりません。置き場で入れ直してください。`);
+      const vars = { name: im.name, size: sizeText(im.size) };
+      if (missing(im)) warns.push(t("「{name}」の中身が見つかりません。置き場で入れ直してください。", vars));
       else if (tooBig(im)) warns.push(im.moving
-        ? `「${im.name}」は動く画像で ${sizeText(im.size)}。5MB を超えていて縮小できないので、ココフォリアに上がらないことがあります。`
-        : `「${im.name}」は ${sizeText(im.size)}。${state.exportOpts.shrink ? "書き出すときに 5MB 以下に縮小します。" : "5MB を超えているので、ココフォリアに上がらないことがあります。"}`);
+        ? t("「{name}」は動く画像で {size}。5MB を超えていて縮小できないので、ココフォリアに上がらないことがあります。", vars)
+        : t("「{name}」は {size}。", vars) + (state.exportOpts.shrink ? t("書き出すときに 5MB 以下に縮小します。") : t("5MB を超えているので、ココフォリアに上がらないことがあります。")));
     }
     $("#edWarn").hidden = !warns.length;
     $("#edWarn").textContent = warns.join(" ");
@@ -601,13 +614,15 @@
     const el = $("#exportSummary");
     el.textContent = "";
     const add = (text, cls) => { const s = document.createElement("span"); if (cls) s.className = cls; s.textContent = text; el.append(s); };
-    if (!state.scenes.length) add("書き出すシーンがまだありません。");
+    const tooMany = state.scenes.length > M.MAX_SCENES;
+    if (!state.scenes.length) add(t("書き出すシーンがまだありません。"));
+    else if (tooMany) add(t("シーンが {n} 件あります。ココフォリアは 1 回の読み込みで {max} 件までしか書き込めないことがあるので、1 つの ZIP は {max} 件までにしてください（「プロジェクトを保存」で控えを取ってから、シーンを減らして分けて書き出せます）。", { n: state.scenes.length, max: M.MAX_SCENES }), "warn");
     else {
-      add(`シーン ${state.scenes.length} 件・画像 ${used.length} 枚を書き出します。`);
-      if (big.length) add(state.exportOpts.shrink ? ` 5MB を超える静止画 ${big.length} 枚は縮小します。` : ` 5MB を超える静止画が ${big.length} 枚あります（ココフォリアに上がらないことがあります）。`, state.exportOpts.shrink ? "" : "warn");
-      if (bigMoving.length) add(` 5MB を超える動く画像が ${bigMoving.length} 枚あります（${bigMoving.map(im => im.name).join("、")}）。縮小できないので、ココフォリアに上がらないことがあります。`, "warn");
+      add(t("シーン {n} 件・画像 {m} 枚を書き出します。", { n: state.scenes.length, m: used.length }));
+      if (big.length) add(state.exportOpts.shrink ? t("5MB を超える静止画 {n} 枚は縮小します。", { n: big.length }) : t("5MB を超える静止画が {n} 枚あります（ココフォリアに上がらないことがあります）。", { n: big.length }), state.exportOpts.shrink ? "" : "warn");
+      if (bigMoving.length) add(t("5MB を超える動く画像が {n} 枚あります（{names}）。縮小できないので、ココフォリアに上がらないことがあります。", { n: bigMoving.length, names: listOf(bigMoving.map(im => im.name)) }), "warn");
     }
-    $("#exportZip").disabled = state.scenes.length === 0;
+    $("#exportZip").disabled = state.scenes.length === 0 || tooMany;
     $("#exportAssets").disabled = state.images.length === 0;
   }
 
@@ -629,7 +644,7 @@
   async function prepared(im, cache) {
     if (cache.has(im.id)) return cache.get(im.id);
     const blob = blobs.get(im.id);
-    if (!blob) throw new Error(`画像「${im.name}」の中身が見つかりません。置き場で入れ直すか、使っているシーンの画像を変えてください。`);
+    if (!blob) throw new Error(t("画像「{name}」の中身が見つかりません。置き場で入れ直すか、使っているシーンの画像を変えてください。", { name: im.name }));
     let out = { type: im.type, blob, small: false };
     if (state.exportOpts.shrink && tooBig(im) && !im.moving) {
       const s = await shrink(im);
@@ -641,16 +656,16 @@
   }
 
   function canExport() {
-    if (!window.JSZip) { exportStatus("ZIP を作る部品を読み込めませんでした。ネットにつながった状態で開き直してください。", true); return false; }
-    if (!(window.crypto && crypto.subtle)) { exportStatus("このブラウザでは ZIP を作れません（https のページか、新しい Chrome・Edge で開いてください）。", true); return false; }
+    if (!window.JSZip) { exportStatus(t("ZIP を作る部品を読み込めませんでした。ネットにつながった状態で開き直してください。"), true); return false; }
+    if (!(window.crypto && crypto.subtle)) { exportStatus(t("このブラウザでは ZIP を作れません（https のページか、新しい Chrome・Edge で開いてください）。"), true); return false; }
     return true;
   }
 
   async function exportZip() {
-    if (!state.scenes.length || !canExport()) return;
+    if (!state.scenes.length || state.scenes.length > M.MAX_SCENES || !canExport()) return;
     const btn = $("#exportZip");
     btn.disabled = true;
-    exportStatus("ZIP を作っています…");
+    exportStatus(t("ZIP を作っています…"));
     try {
       const cache = new Map();
       const file = async im => { if (!im) return null; const p = await prepared(im, cache); return R.image(p.type, p.bytes, im.id); };
@@ -675,15 +690,15 @@
       saveNow();
       const all = [...cache.values()];
       const small = all.filter(p => p.small).length, over = all.filter(p => p.bytes.length > MAX_IMAGE).length;
-      exportStatus(`書き出しました（シーン ${state.scenes.length} 件・画像 ${files.length} 枚・${sizeText(blob.size)}）。`
-        + (adding ? "ココフォリアのルーム設定からインポートすると、シーン一覧の最後に追加されます。" : "インポートすると、前に入れたシーンが置き換わります。")
-        + (small ? `${small} 枚は 5MB 以下に縮小しました。` : "")
-        + (over ? `5MB を超える画像が ${over} 枚あり、ココフォリアに上がらないことがあります。` : ""), over > 0);
+      exportStatus(t("書き出しました（シーン {n} 件・画像 {m} 枚・{size}）。", { n: state.scenes.length, m: files.length, size: sizeText(blob.size) })
+        + (adding ? t("ココフォリアのルーム設定からインポートすると、シーン一覧の最後に追加されます。") : t("インポートすると、前に入れたシーンが置き換わります。"))
+        + (small ? t("{n} 枚は 5MB 以下に縮小しました。", { n: small }) : "")
+        + (over ? t("5MB を超える画像が {n} 枚あり、ココフォリアに上がらないことがあります。", { n: over }) : ""), over > 0);
     } catch (err) {
       console.error(err);
-      exportStatus("ZIP を作れませんでした: " + err.message, true);
+      exportStatus(t("ZIP を作れませんでした: {error}", { error: err.message }), true);
     } finally {
-      btn.disabled = state.scenes.length === 0;
+      btn.disabled = state.scenes.length === 0 || state.scenes.length > M.MAX_SCENES;
     }
   }
 
@@ -692,7 +707,7 @@
     if (!state.images.length || !canExport()) return;
     const btn = $("#exportAssets");
     btn.disabled = true;
-    exportStatus("素材の ZIP を作っています…");
+    exportStatus(t("素材の ZIP を作っています…"));
     try {
       const cache = new Map();
       const zip = new window.JSZip();
@@ -711,18 +726,19 @@
       for (const im of state.images) {
         if (missing(im)) { skipped++; continue; }
         const asBg = state.scenes.some(s => s.bg === im.id), asFg = state.scenes.some(s => M.fgIdOf(state, s) === im.id);
-        if (asBg) await put("背景", im);
-        if (asFg) await put("前景", im);
-        if (!asBg && !asFg) await put("そのほか", im);
+        // Folder names in the language of the page, like the rest of what the user reads.
+        if (asBg) await put(t("背景"), im);
+        if (asFg) await put(t("前景"), im);
+        if (!asBg && !asFg) await put(t("そのほか"), im);
       }
       const blob = await zip.generateAsync({ type: "blob", compression: "STORE" });
       download(blob, `scenes-assets-${stamp()}.zip`);
       const small = [...cache.values()].filter(p => p.small).length;
-      exportStatus(`素材を書き出しました（${count} 枚・${sizeText(blob.size)}）。展開して、ココフォリアの画像選択の画面にドロップすると、自分の素材に入ります。`
-        + (small ? `${small} 枚は縮小後の画像です。` : "") + (skipped ? `中身の見つからない画像 ${skipped} 枚は入っていません。` : ""), skipped > 0);
+      exportStatus(t("素材を書き出しました（{n} 枚・{size}）。展開して、ココフォリアの画像選択の画面にドロップすると、自分の素材に入ります。", { n: count, size: sizeText(blob.size) })
+        + (small ? t("{n} 枚は縮小後の画像です。", { n: small }) : "") + (skipped ? t("中身の見つからない画像 {n} 枚は入っていません。", { n: skipped }) : ""), skipped > 0);
     } catch (err) {
       console.error(err);
-      exportStatus("素材の ZIP を作れませんでした: " + err.message, true);
+      exportStatus(t("素材の ZIP を作れませんでした: {error}", { error: err.message }), true);
     } finally {
       btn.disabled = state.images.length === 0;
     }
@@ -741,8 +757,8 @@
 
   async function openProject(file) {
     let data;
-    try { data = JSON.parse(await file.text()); } catch (err) { status("プロジェクトファイルを読めませんでした。", true); return; }
-    if (!data || data.app !== APP_ID) { status("このツールのプロジェクトファイルではありません。", true); return; }
+    try { data = JSON.parse(await file.text()); } catch (err) { status(t("プロジェクトファイルを読めませんでした。"), true); return; }
+    if (!data || data.app !== APP_ID) { status(t("このツールのプロジェクトファイルではありません。"), true); return; }
     const next = M.normalize(data.state);
     for (const im of next.images) {
       const url = data.assets && data.assets[im.id];
@@ -756,7 +772,7 @@
     touch();
     commit();
     saveNow();
-    status(`プロジェクトを開きました（シーン ${state.scenes.length} 件・画像 ${state.images.length} 枚）。`);
+    status(t("プロジェクトを開きました（シーン {n} 件・画像 {m} 枚）。", { n: state.scenes.length, m: state.images.length }));
   }
 
   // ---------------------------------------------------------------- wiring
@@ -776,12 +792,12 @@
       const n = addScenes(ids);
       touch();
       commit();
-      if (!$("#status").classList.contains("error")) status($("#status").textContent + `シーンを ${n} 件作りました。`);
+      if (!$("#status").classList.contains("error")) status($("#status").textContent + t("シーンを {n} 件作りました。", { n }));
     });
     zone("#dropShelf", "#shelfFiles", ids => {
       if (!ids.length) return;
       // The first frame dropped becomes the shared foreground if there is none yet.
-      if (!state.commonFg) { state.commonFg = ids[0]; status($("#status").textContent + "共通の前景にしました。", $("#status").classList.contains("error")); }
+      if (!state.commonFg) { state.commonFg = ids[0]; status($("#status").textContent + t("共通の前景にしました。"), $("#status").classList.contains("error")); }
       touch();
       commit();
     });
@@ -793,31 +809,31 @@
     });
     // A file dropped outside a drop area would make the browser leave the page to show it.
     window.addEventListener("dragover", ev => { if (hasFiles(ev)) ev.preventDefault(); });
-    window.addEventListener("drop", ev => { if (hasFiles(ev) && !ev.defaultPrevented) { ev.preventDefault(); status("画像は「1. 背景の画像を入れる」の枠にドロップしてください。", true); } });
+    window.addEventListener("drop", ev => { if (hasFiles(ev) && !ev.defaultPrevented) { ev.preventDefault(); status(t("画像は「1. 背景の画像を入れる」の枠にドロップしてください。"), true); } });
   }
 
   function wireCommon() {
     const each = fn => { state.scenes.forEach(fn); touch({ keepGallery: true }); commit(); };
     $("#commonFg").addEventListener("change", ev => { state.commonFg = ev.target.value || null; touch({ keepGallery: true }); commit(); });
     $("#commonFgAdd").addEventListener("click", () => pickFile(ids => { state.commonFg = ids[0]; }));
-    $("#allFgCommon").addEventListener("click", () => { each(s => { s.fg = "common"; }); status("全シーンの前景を「共通の前景」にしました。"); });
+    $("#allFgCommon").addEventListener("click", () => { each(s => { s.fg = "common"; }); status(t("全シーンの前景を「共通の前景」にしました。")); });
     $("#defLongSide").addEventListener("change", ev => { state.defaults.longSide = numberOf(ev.target, 48); touch({ keepGallery: true }); commit(); });
     $("#allSize").addEventListener("click", () => {
       let n = 0;
       each(s => { if (fitSize(s)) n++; });
-      status(`${n} 件のシーンを、背景の形に合わせました（長い辺 ${state.defaults.longSide} マス）。`);
+      status(t("{n} 件のシーンを、背景の形に合わせました（長い辺 {side} マス）。", { n, side: state.defaults.longSide }));
     });
     $("#defGrid").addEventListener("change", ev => { state.defaults.displayGrid = ev.target.checked; touch({ keepGallery: true }); commit(); });
     $("#defGridSize").addEventListener("change", ev => { state.defaults.gridSize = numberOf(ev.target, 1); touch({ keepGallery: true }); commit(); });
     $("#allGrid").addEventListener("click", () => {
       each(s => { s.displayGrid = state.defaults.displayGrid; s.gridSize = state.defaults.gridSize; });
-      status(`全シーンのグリッドを「${state.defaults.displayGrid ? `表示（${state.defaults.gridSize} マスごと）` : "表示しない"}」にしました。`);
+      status(state.defaults.displayGrid ? t("全シーンのグリッドを表示にしました（間隔 {n} マス）。", { n: state.defaults.gridSize }) : t("全シーンのグリッドを消しました。"));
     });
     $("#defFit").addEventListener("change", ev => { state.defaults.fit = ev.target.value; touch({ keepGallery: true }); commit(); });
-    $("#allFit").addEventListener("click", () => { each(s => { s.fit = state.defaults.fit; }); status("全シーンの画像のはめ方をそろえました。"); });
+    $("#allFit").addEventListener("click", () => { each(s => { s.fit = state.defaults.fit; }); status(t("全シーンの画像のはめ方をそろえました。")); });
     $("#namesFromFiles").addEventListener("click", () => {
       each(s => { const bg = bgOf(s); if (bg) s.name = bg.name; });
-      status("シーンタイトルを、背景の画像の名前にそろえました。");
+      status(t("シーンタイトルを、背景の画像の名前にそろえました。"));
     });
     $("#addEmpty").addEventListener("click", () => {
       const sc = M.newScene(state, null, R.newId(random));
@@ -851,14 +867,14 @@
     $("#edSizeAuto").addEventListener("click", () => {
       const s = cur();
       if (!s) return;
-      if (!fitSize(s)) { status("背景の画像がないので、合わせられません。", true); return; }
+      if (!fitSize(s)) { status(t("背景の画像がないので、合わせられません。"), true); return; }
       touch({ keepGallery: true });
       commit();
     });
     $("#edDup").addEventListener("click", () => {
       const s = cur();
       if (!s) return;
-      const copy = Object.assign({}, s, { id: M.uid("s"), ccfId: R.newId(random), name: s.name ? s.name + " のコピー" : "" });
+      const copy = Object.assign({}, s, { id: M.uid("s"), ccfId: R.newId(random), name: s.name ? t("{name} のコピー", { name: s.name }) : "" });
       state.scenes.splice(state.scenes.indexOf(s) + 1, 0, copy);
       selected = copy.id;
       touch({ keepGallery: true });
@@ -872,7 +888,7 @@
       selected = (state.scenes[i] || state.scenes[i - 1] || {}).id || null;
       touch({ keepGallery: true });
       commit();
-      status("シーンを削除しました（置き場の画像は残ります）。「元に戻す」で戻せます。");
+      status(t("シーンを削除しました（置き場の画像は残ります）。「元に戻す」で戻せます。"));
     });
     dropTarget($("#stage"), ids => { const s = cur(); if (s && ids.length) { setBg(s, ids[0]); touch(); commit(); } });
   }
@@ -892,8 +908,8 @@
       const k = ev.key.toLowerCase();
       if (k !== "z" && k !== "y") return;
       // Text and number fields keep the browser's own undo.
-      const t = ev.target;
-      if (t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && /^(text|number|url|search)$/.test(t.type))) return;
+      const target = ev.target;
+      if (target instanceof HTMLTextAreaElement || (target instanceof HTMLInputElement && /^(text|number|url|search)$/.test(target.type))) return;
       ev.preventDefault();
       if (k === "y" || ev.shiftKey) redo(); else undo();
     });
@@ -901,9 +917,9 @@
     $("#saveProject").addEventListener("click", async () => {
       try {
         download(new Blob([JSON.stringify(await projectData())], { type: "application/json" }), `scenes-${stamp()}.scene.json`);
-        status("プロジェクトを保存しました（置き場の画像も入っています）。");
+        status(t("プロジェクトを保存しました（置き場の画像も入っています）。"));
       } catch (err) {
-        status("プロジェクトを保存できませんでした: " + err.message, true);
+        status(t("プロジェクトを保存できませんでした: {error}", { error: err.message }), true);
       }
     });
     $("#loadProject").addEventListener("click", () => $("#projectFile").click());
@@ -913,13 +929,13 @@
       if (file) openProject(file);
     });
     $("#resetAll").addEventListener("click", () => {
-      if (!confirm("いまの作業内容を消して、最初の状態に戻します。よろしいですか？")) return;
+      if (!confirm(t("いまの作業内容を消して、最初の状態に戻します。よろしいですか？"))) return;
       state = M.defaultState();
       selected = null;
       keepBlobsStored();
       touch();
       commit();
-      status("最初の状態に戻しました。「元に戻す」で戻せます。");
+      status(t("最初の状態に戻しました。「元に戻す」で戻せます。"));
     });
     let resizeTimer = 0;
     window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(renderBoard, 100); });
@@ -935,7 +951,7 @@
     touch();
     db = await openDb();
     await loadBlobs();
-    if (!db) status("このブラウザでは画像を保存できません。画像を入れたら「プロジェクトを保存」でファイルに残してください。", true);
+    if (!db) status(t("このブラウザでは画像を保存できません。画像を入れたら「プロジェクトを保存」でファイルに残してください。"), true);
     touch();
     commit();
   }
