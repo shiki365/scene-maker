@@ -10,6 +10,12 @@
  * The ids scenes get in CCFOLIA (scene.ccfId) and state.orderBase are not part of undo: they must
  * stay what the last exported zip had, or "overwrite" would miss the scenes already imported.
  *
+ * Marker panels: state.commonMarkers (on every scene that wants them) and scene.markers. The board sample
+ * edits one of the two lists at a time (markerMode); the other is drawn faded. Dragging changes the marker
+ * in place and redraws nothing until the pointer is released (a rebuilt element would lose the pointer).
+ * Templates belong to the browser, not to the work: localStorage (TPL_KEY) for what they are, and their
+ * image bytes in IndexedDB under "t:<sha-256>". Undo, autosave and project files do not touch them.
+ *
  * What CCFOLIA does with the zip is in roomdata.v1.js and model.v1.js (CCFOLIA 1.37.4, 2026-10-02;
  * the same in 1.37.6, checked 2026-10-30).
  *
@@ -33,6 +39,8 @@
   let state = M.defaultState();
   let selected = null;     // scene id
   let pendingPick = null;  // called with the ids of the files chosen through #imageFile
+  let markerMode = "scene"; // which markers the board sample edits: "scene" | "common"
+  let selectedMarker = null; // marker id
   const random = n => crypto.getRandomValues(new Uint8Array(n));
 
   function status(message, isError) {
@@ -187,6 +195,7 @@
     let keys = [];
     try { keys = await dbRun("readonly", s => s.getAllKeys()); } catch (err) { return; }
     for (const key of keys) {
+      if (String(key).startsWith("t:")) continue; // a template's image (see templates below)
       if (!ids.has(key)) { dbRun("readwrite", s => s.delete(key)).catch(() => {}); continue; } // left over from a removed image
       try {
         const blob = await dbRun("readonly", s => s.get(key));
@@ -285,14 +294,16 @@
   const fgOf = scene => imageById(M.fgIdOf(state, scene));
   const bgOf = scene => imageById(scene.bg);
 
+  const allMarkers = () => state.commonMarkers.concat(...state.scenes.map(s => s.markers));
   function usesOf(id) {
     return {
       bg: state.scenes.filter(s => s.bg === id).length,
       fg: state.scenes.filter(s => s.fg === id).length,
       common: state.commonFg === id,
+      markers: allMarkers().filter(m => m.imageId === id).length,
     };
   }
-  const isUsed = id => state.scenes.some(s => s.bg === id || M.fgIdOf(state, s) === id);
+  const isUsed = id => state.scenes.some(s => s.bg === id || M.fgIdOf(state, s) === id || M.markersOf(state, s).some(m => m.imageId === id));
 
   // ---------------------------------------------------------------- shrinking for export
 
@@ -394,12 +405,14 @@
     if (u.bg) uses.push(t("背景に使っているシーン {n} 件", { n: u.bg }));
     if (u.fg) uses.push(t("前景に使っているシーン {n} 件", { n: u.fg }));
     if (u.common) uses.push(t("共通の前景"));
+    if (u.markers) uses.push(t("マーカーパネル {n} 枚", { n: u.markers }));
     if (uses.length && !confirm(t("「{name}」は次の所で使っています。\n{uses}\n\n削除すると、これらは「画像なし」になります。削除しますか？", { name: im.name, uses: uses.join("\n") }))) return;
     for (const s of state.scenes) {
       if (s.bg === im.id) s.bg = null;
       if (s.fg === im.id) s.fg = "none";
     }
     if (state.commonFg === im.id) state.commonFg = null;
+    for (const m of allMarkers()) if (m.imageId === im.id) m.imageId = null;
     state.images = state.images.filter(x => x !== im);
     unstoreBlob(im.id); // the Blob stays in memory, so undo can bring the image back
     touch();
@@ -565,6 +578,7 @@
       g.style.backgroundSize = `${step}px ${step}px`;
       board.append(g);
     }
+    drawMarkers(sc, board, M.CELL * scale);
     const ratio = im => im && im.w && im.h ? Math.abs(im.w / im.h - sc.width / sc.height) / (sc.width / sc.height) : 0;
     const off = [];
     if (ratio(bg) > 0.05) off.push(t("背景"));
@@ -573,6 +587,96 @@
     $("#stageNote").textContent = t("盤面 {w} × {h} マス（{pw} × {ph}px）。", { w: sc.width, h: sc.height, pw: sc.width * M.CELL, ph: sc.height * M.CELL })
       + (!off.length ? "" : sc.fit === "cover" ? t("{parts}の形がフィールドと違うので、はみ出しが切れます。", { parts })
         : t("{parts}の形がフィールドと違うので、伸びて表示されます。", { parts }));
+  }
+
+  // ---------------------------------------------------------------- marker panels
+
+  const markerList = sc => (markerMode === "common" ? state.commonMarkers : sc ? sc.markers : []);
+  const markerById = (sc, id) => markerList(sc).find(m => m.id === id) || null;
+  const markerLabel = (m, i) => m.text || (imageById(m.imageId) || {}).name || t("マーカー {n}", { n: i + 1 });
+
+  // The field's top left is at -floor(w / 2), -floor(h / 2) cells: markers are placed from the middle.
+  function placeMarker(el, m, sc, cs) {
+    el.style.left = (m.x + Math.floor(sc.width / 2)) * cs + "px";
+    el.style.top = (m.y + Math.floor(sc.height / 2)) * cs + "px";
+    el.style.width = m.width * cs + "px";
+    el.style.height = m.height * cs + "px";
+    el.style.transform = m.angle ? `rotate(${m.angle}deg)` : "";
+  }
+
+  function drawMarkers(sc, board, cs) {
+    board.dataset.cs = cs;
+    const edited = markerList(sc);
+    const shown = (sc.useCommonMarkers || markerMode === "common" ? state.commonMarkers : []).concat(sc.markers);
+    shown.forEach((m, z) => {
+      const editable = edited.includes(m);
+      const el = document.createElement("div");
+      el.className = "mk" + (editable ? " edit" : " other") + (m.id === selectedMarker && editable ? " sel" : "") + (m.imageId ? "" : " empty");
+      el.dataset.id = m.id;
+      el.style.zIndex = 10 + z;
+      if (editable) { el.tabIndex = 0; el.setAttribute("aria-label", markerLabel(m, edited.indexOf(m))); }
+      if (m.text) el.title = m.text;
+      const src = srcOf(m.imageId);
+      if (src) { const img = document.createElement("img"); img.src = src; img.alt = ""; img.draggable = false; el.append(img); }
+      if (editable && m.id === selectedMarker) { const h = document.createElement("div"); h.className = "mk-h"; el.append(h); }
+      placeMarker(el, m, sc, cs);
+      board.append(el);
+    });
+  }
+
+  function renderMarkers(keepFields) {
+    const sc = sceneById(selected);
+    if (!sc) return;
+    for (const b of document.querySelectorAll("[data-mk-mode]")) b.setAttribute("aria-pressed", String(b.dataset.mkMode === markerMode));
+    $("#edUseCommon").checked = sc.useCommonMarkers;
+    const list = markerList(sc);
+    if (selectedMarker && !list.some(m => m.id === selectedMarker)) selectedMarker = null;
+    const box = $("#mkList");
+    box.textContent = "";
+    if (!list.length) {
+      const p = document.createElement("p");
+      p.className = "desc";
+      p.textContent = markerMode === "common" ? t("全シーン共通のマーカーは、まだありません。") : t("このシーンのマーカーは、まだありません。");
+      box.append(p);
+    }
+    list.forEach((m, i) => {
+      const row = document.createElement("div");
+      row.className = "mk-row";
+      row.setAttribute("role", "option");
+      row.setAttribute("aria-selected", String(m.id === selectedMarker));
+      row.tabIndex = 0;
+      const pic = document.createElement("span");
+      pic.className = "mk-pic";
+      const src = srcOf(m.imageId);
+      if (src) pic.style.backgroundImage = `url("${src}")`;
+      const label = document.createElement("span");
+      label.className = "mk-label";
+      label.textContent = markerLabel(m, i);
+      const where = document.createElement("span");
+      where.className = "mk-where";
+      where.textContent = `${m.x}, ${m.y} · ${m.width}×${m.height}`;
+      row.append(pic, label, where);
+      const pick = () => { selectedMarker = m.id; touch({ keepGallery: true }); };
+      row.addEventListener("click", pick);
+      row.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick(); } });
+      box.append(row);
+    });
+    const m = markerById(sc, selectedMarker);
+    $("#mkDetail").hidden = !m;
+    if (!m) return;
+    if (!keepFields) {
+      $("#mkText").value = m.text;
+      $("#mkClickValue").value = m.clickValue;
+    }
+    for (const [id, v] of [["mkX", m.x], ["mkY", m.y], ["mkW", m.width], ["mkH", m.height], ["mkAngle", m.angle]]) if (document.activeElement !== $("#" + id)) $("#" + id).value = v;
+    fillImageSelect($("#mkImage"), [["", t("画像なし")]], m.imageId || "");
+    $("#mkLocked").checked = m.locked;
+    $("#mkFreezed").checked = m.freezed;
+    $("#mkClick").value = m.click === "message" ? "message" : "none";
+    $("#mkClickRow").hidden = m.click !== "message";
+    const i = list.indexOf(m);
+    $("#mkBack").disabled = i <= 0;
+    $("#mkFront").disabled = i >= list.length - 1;
   }
 
   function renderEditor(keepFields) {
@@ -604,6 +708,7 @@
     $("#edWarn").hidden = !warns.length;
     $("#edWarn").textContent = warns.join(" ");
     renderBoard();
+    renderMarkers(keepFields);
   }
 
   function renderExport() {
@@ -681,7 +786,10 @@
       const scenes = {};
       for (let i = 0; i < state.scenes.length; i++) {
         const sc = state.scenes[i];
-        scenes[sc.ccfId] = M.toEntity(sc, await file(bgOf(sc)), await file(fgOf(sc)), state.orderBase + i);
+        const markers = {};
+        const list = M.markersOf(state, sc);
+        for (let k = 0; k < list.length; k++) markers[list[k].id] = M.markerEntity(list[k], await file(imageById(list[k].imageId)), k + 1);
+        scenes[sc.ccfId] = M.toEntity(sc, await file(bgOf(sc)), await file(fgOf(sc)), state.orderBase + i, markers);
       }
       const { zip, files } = await R.build({ scenes }, { JSZip: window.JSZip, subtle: crypto.subtle });
       // Images are already compressed; storing them keeps the export quick.
@@ -726,10 +834,12 @@
       for (const im of state.images) {
         if (missing(im)) { skipped++; continue; }
         const asBg = state.scenes.some(s => s.bg === im.id), asFg = state.scenes.some(s => M.fgIdOf(state, s) === im.id);
+        const asMarker = state.scenes.some(s => M.markersOf(state, s).some(m => m.imageId === im.id));
+        if (asMarker) await put(t("マーカー"), im);
         // Folder names in the language of the page, like the rest of what the user reads.
         if (asBg) await put(t("背景"), im);
         if (asFg) await put(t("前景"), im);
-        if (!asBg && !asFg) await put(t("そのほか"), im);
+        if (!asBg && !asFg && !asMarker) await put(t("そのほか"), im);
       }
       const blob = await zip.generateAsync({ type: "blob", compression: "STORE" });
       download(blob, `scenes-assets-${stamp()}.zip`);
@@ -874,7 +984,8 @@
     $("#edDup").addEventListener("click", () => {
       const s = cur();
       if (!s) return;
-      const copy = Object.assign({}, s, { id: M.uid("s"), ccfId: R.newId(random), name: s.name ? t("{name} のコピー", { name: s.name }) : "" });
+      const copy = Object.assign({}, s, { id: M.uid("s"), ccfId: R.newId(random), name: s.name ? t("{name} のコピー", { name: s.name }) : "",
+        markers: s.markers.map(m => Object.assign({}, m, { id: M.uid("k") })) });
       state.scenes.splice(state.scenes.indexOf(s) + 1, 0, copy);
       selected = copy.id;
       touch({ keepGallery: true });
@@ -891,6 +1002,287 @@
       status(t("シーンを削除しました（置き場の画像は残ります）。「元に戻す」で戻せます。"));
     });
     dropTarget($("#stage"), ids => { const s = cur(); if (s && ids.length) { setBg(s, ids[0]); touch(); commit(); } });
+  }
+
+  function wireMarkers() {
+    const cur = () => sceneById(selected);
+    const curMarker = () => markerById(cur(), selectedMarker);
+    const edit = (fn, typing) => { const m = curMarker(); if (!m) return; fn(m); touch({ keepGallery: true, keepEditorFields: !!typing }); if (!typing) commit(); };
+    for (const b of document.querySelectorAll("[data-mk-mode]")) {
+      b.addEventListener("click", () => { markerMode = b.dataset.mkMode; selectedMarker = null; touch({ keepGallery: true }); });
+    }
+    $("#edUseCommon").addEventListener("change", ev => { const s = cur(); if (!s) return; s.useCommonMarkers = ev.target.checked; touch({ keepGallery: true }); commit(); });
+    const add = imageId => {
+      const s = cur();
+      if (!s) return;
+      const m = M.newMarker(imageById(imageId));
+      markerList(s).push(m);
+      selectedMarker = m.id;
+      touch({ keepGallery: true });
+      commit();
+    };
+    $("#mkAdd").addEventListener("click", () => add(null));
+    $("#mkAddFile").addEventListener("click", () => pickFile(ids => add(ids[0])));
+    $("#mkText").addEventListener("input", ev => edit(m => { m.text = ev.target.value; }, true));
+    $("#mkText").addEventListener("change", commit);
+    $("#mkClickValue").addEventListener("input", ev => edit(m => { m.clickValue = ev.target.value; }, true));
+    $("#mkClickValue").addEventListener("change", commit);
+    const num = (id, key, min, max) => $("#" + id).addEventListener("change", ev => edit(m => { m[key] = M.clampInt(ev.target.value, min, max, m[key]); }));
+    num("mkX", "x", -M.MAX_POS, M.MAX_POS);
+    num("mkY", "y", -M.MAX_POS, M.MAX_POS);
+    num("mkW", "width", 1, M.MAX_CELLS);
+    num("mkH", "height", 1, M.MAX_CELLS);
+    num("mkAngle", "angle", -360, 360);
+    $("#mkImage").addEventListener("change", ev => edit(m => { m.imageId = ev.target.value || null; }));
+    $("#mkLocked").addEventListener("change", ev => edit(m => { m.locked = ev.target.checked; }));
+    $("#mkFreezed").addEventListener("change", ev => edit(m => { m.freezed = ev.target.checked; }));
+    $("#mkClick").addEventListener("change", ev => edit(m => { m.click = ev.target.value; }));
+    const shift = d => { const s = cur(), list = markerList(s), i = list.findIndex(m => m.id === selectedMarker), j = i + d;
+      if (i < 0 || j < 0 || j >= list.length) return; [list[i], list[j]] = [list[j], list[i]]; touch({ keepGallery: true }); commit(); };
+    $("#mkBack").addEventListener("click", () => shift(-1));
+    $("#mkFront").addEventListener("click", () => shift(1));
+    $("#mkDup").addEventListener("click", () => {
+      const s = cur(), m = curMarker();
+      if (!m) return;
+      const copy = Object.assign({}, m, { id: M.uid("k"), x: m.x + 1, y: m.y + 1 });
+      markerList(s).push(copy);
+      selectedMarker = copy.id;
+      touch({ keepGallery: true });
+      commit();
+    });
+    $("#mkDelete").addEventListener("click", () => {
+      const s = cur(), list = markerList(s), i = list.findIndex(m => m.id === selectedMarker);
+      if (i < 0) return;
+      list.splice(i, 1);
+      selectedMarker = null;
+      touch({ keepGallery: true });
+      commit();
+      status(t("マーカーを削除しました。「元に戻す」で戻せます。"));
+    });
+
+    // Dragging on the board sample: the marker moves (or, by its corner, grows) a cell at a time.
+    const board = $("#board");
+    let drag = null;
+    board.addEventListener("pointerdown", ev => {
+      const el = ev.target.closest(".mk.edit");
+      if (!el || ev.button !== 0) return;
+      const s = cur(), m = markerById(s, el.dataset.id);
+      if (!m) return;
+      ev.preventDefault();
+      const resize = ev.target.classList.contains("mk-h");
+      if (selectedMarker !== m.id) { selectedMarker = m.id; touch({ keepGallery: true }); }
+      const target = board.querySelector(`.mk[data-id="${m.id}"]`);
+      target.setPointerCapture(ev.pointerId);
+      target.focus({ preventScroll: true });
+      drag = { m, s, el: target, resize, x0: ev.clientX, y0: ev.clientY, start: { x: m.x, y: m.y, w: m.width, h: m.height }, cs: Number(board.dataset.cs), moved: false };
+    });
+    board.addEventListener("pointermove", ev => {
+      if (!drag) return;
+      const dx = Math.round((ev.clientX - drag.x0) / drag.cs), dy = Math.round((ev.clientY - drag.y0) / drag.cs);
+      const { m, start } = drag;
+      if (drag.resize) { m.width = Math.max(1, start.w + dx); m.height = Math.max(1, start.h + dy); }
+      else { m.x = M.clampInt(start.x + dx, -M.MAX_POS, M.MAX_POS, m.x); m.y = M.clampInt(start.y + dy, -M.MAX_POS, M.MAX_POS, m.y); }
+      drag.moved = drag.moved || dx !== 0 || dy !== 0;
+      placeMarker(drag.el, m, drag.s, drag.cs);
+    });
+    const end = () => { if (!drag) return; const moved = drag.moved; drag = null; if (moved) { touch({ keepGallery: true }); commit(); } };
+    board.addEventListener("pointerup", end);
+    board.addEventListener("pointercancel", end);
+    board.addEventListener("keydown", ev => {
+      const el = ev.target.closest(".mk.edit");
+      const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key];
+      if (!el || !step) return;
+      ev.preventDefault();
+      selectedMarker = el.dataset.id;
+      edit(m => { m.x = M.clampInt(m.x + step[0], -M.MAX_POS, M.MAX_POS, m.x); m.y = M.clampInt(m.y + step[1], -M.MAX_POS, M.MAX_POS, m.y); });
+      const again = board.querySelector(`.mk[data-id="${selectedMarker}"]`);
+      if (again) again.focus({ preventScroll: true });
+    });
+  }
+
+  // ---------------------------------------------------------------- templates
+
+  const TPL_KEY = "ccf-scene-maker.templates", TPL_SEEDED = "ccf-scene-maker.templates-seeded", TPL_APP = "ccf-scene-maker-templates";
+  let templates = [];
+  const tplBlobs = new Map(); // sha-256 -> Blob, while the page is open
+
+  function loadTemplates() {
+    try { templates = M.normalizeTemplates(JSON.parse(localStorage.getItem(TPL_KEY) || "[]")); } catch (err) { templates = []; }
+  }
+  function saveTemplates() {
+    try { localStorage.setItem(TPL_KEY, JSON.stringify(templates)); }
+    catch (err) { status(t("テンプレートをブラウザに保存できませんでした。「テンプレートを書き出す」でファイルに残してください。"), true); }
+  }
+  async function keepTplBlob(hash, blob) {
+    tplBlobs.set(hash, blob);
+    if (db) await dbRun("readwrite", st => st.put(blob, "t:" + hash)).catch(() => {});
+  }
+  async function tplBlob(hash) {
+    if (tplBlobs.has(hash)) return tplBlobs.get(hash);
+    const onShelf = state.images.find(im => im.hash === hash && blobs.has(im.id));
+    if (onShelf) return blobs.get(onShelf.id);
+    if (!db) return null;
+    try { const b = await dbRun("readonly", st => st.get("t:" + hash)); if (b) tplBlobs.set(hash, b); return b || null; } catch (err) { return null; }
+  }
+  // Images no template needs any more leave IndexedDB.
+  function dropUnusedTplBlobs() {
+    const used = new Set(templates.flatMap(tp => Object.keys(tp.images)));
+    for (const hash of [...tplBlobs.keys()]) if (!used.has(hash)) tplBlobs.delete(hash);
+    if (!db) return;
+    dbRun("readonly", st => st.getAllKeys()).then(keys => {
+      for (const k of keys) if (String(k).startsWith("t:") && !used.has(String(k).slice(2))) dbRun("readwrite", st => st.delete(k)).catch(() => {});
+    }).catch(() => {});
+  }
+
+  const solidBlob = color => new Promise(res => {
+    const c = document.createElement("canvas");
+    c.width = 1920; c.height = 1080;
+    const x = c.getContext("2d");
+    x.fillStyle = color;
+    x.fillRect(0, 0, c.width, c.height);
+    c.toBlob(res, "image/png");
+  });
+
+  // Two templates to start with, made once per browser: a divider ("|ーー") and a black-out.
+  async function seedTemplates() {
+    try { if (localStorage.getItem(TPL_SEEDED)) return; localStorage.setItem(TPL_SEEDED, "1"); } catch (err) { return; }
+    if (templates.length) return;
+    const blob = await solidBlob("#000000");
+    const hash = R.hex(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()));
+    await keepTplBlob(hash, blob);
+    const base = { text: "", fg: "none", width: 48, height: 27, sizeAuto: true, displayGrid: false, gridSize: 1, fit: "fill", useCommonMarkers: false, markers: [] };
+    templates = M.normalizeTemplates([
+      { label: t("区切り（|ーー）"), images: {}, scene: Object.assign({}, base, { name: "|ーー", bg: null, sizeAuto: false }) },
+      { label: t("暗転（黒）"), images: { [hash]: { name: t("黒"), type: "image/png", size: blob.size, w: 1920, h: 1080, moving: false } },
+        scene: Object.assign({}, base, { name: t("暗転"), bg: "h:" + hash }) },
+    ]);
+    saveTemplates();
+  }
+
+  function renderTemplates() {
+    const box = $("#tplList");
+    box.textContent = "";
+    if (!templates.length) {
+      const p = document.createElement("p");
+      p.className = "desc";
+      p.textContent = t("まだテンプレートがありません。");
+      box.append(p);
+    }
+    for (const tp of templates) {
+      const row = document.createElement("div");
+      row.className = "tpl-row";
+      const name = document.createElement("input");
+      name.type = "text";
+      name.value = tp.label;
+      name.setAttribute("aria-label", t("テンプレートの名前"));
+      name.addEventListener("change", () => { tp.label = name.value; saveTemplates(); });
+      const use = button(t("足す"), { aria: t("テンプレート「{name}」のシーンを足す", { name: tp.label }) });
+      use.addEventListener("click", () => insertTemplate(tp));
+      const del = button(t("削除"), { danger: true, aria: t("テンプレート「{name}」を削除", { name: tp.label }) });
+      del.addEventListener("click", () => {
+        if (!confirm(t("テンプレート「{name}」を削除しますか？（作ったシーンはそのまま残ります）", { name: tp.label }))) return;
+        templates = templates.filter(x => x !== tp);
+        saveTemplates();
+        dropUnusedTplBlobs();
+        renderTemplates();
+        status(t("テンプレートを削除しました。"));
+      });
+      row.append(name, use, del);
+      box.append(row);
+    }
+  }
+
+  async function saveAsTemplate() {
+    const sc = sceneById(selected);
+    if (!sc) { status(t("テンプレートにするシーンを、一覧で選んでください。"), true); return; }
+    const label = prompt(t("テンプレートの名前"), sc.name || t("新しいテンプレート"));
+    if (label == null) return;
+    const tp = M.sceneToTemplate(state, sc, label.trim() || sc.name);
+    for (const hash of Object.keys(tp.images)) {
+      const im = state.images.find(x => x.hash === hash && blobs.has(x.id));
+      if (im) await keepTplBlob(hash, blobs.get(im.id));
+    }
+    templates.push(tp);
+    saveTemplates();
+    renderTemplates();
+    status(t("テンプレート「{name}」を作りました。「足す」で何度でも使えます。", { name: tp.label }) + (db ? "" : t("このブラウザでは画像を保存できないので、閉じる前に「テンプレートを書き出す」でファイルに残してください。")));
+  }
+
+  // The template's images go on the shelf (one already there with the same content is used), then the scene
+  // is put right after the selected one.
+  async function insertTemplate(tp) {
+    const idOf = {};
+    let lost = 0;
+    for (const [hash, meta] of Object.entries(tp.images)) {
+      const had = state.images.find(im => im.hash === hash && blobs.has(im.id));
+      if (had) { idOf[hash] = had.id; continue; }
+      const blob = await tplBlob(hash);
+      if (!blob) { lost++; continue; }
+      const im = { id: M.uid("i"), name: meta.name || t("画像"), type: meta.type || blob.type, size: blob.size, hash, w: meta.w, h: meta.h, moving: meta.moving };
+      holdBlob(im.id, blob);
+      state.images.push(im);
+      await storeBlob(im.id, blob);
+      idOf[hash] = im.id;
+    }
+    const sc = M.sceneFromTemplate(tp, hash => idOf[hash] || null, R.newId(random));
+    const at = state.scenes.findIndex(x => x.id === selected);
+    state.scenes.splice(at < 0 ? state.scenes.length : at + 1, 0, sc);
+    selected = sc.id;
+    selectedMarker = null;
+    touch();
+    commit();
+    status(t("テンプレート「{name}」のシーンを足しました。", { name: tp.label }) + (lost ? t("画像 {n} 枚が見つかりませんでした。", { n: lost }) : ""), lost > 0);
+    const name = $("#edName");
+    name.focus();
+    name.setSelectionRange(name.value.length, name.value.length);
+  }
+
+  async function exportTemplates() {
+    if (!templates.length) { status(t("書き出すテンプレートがありません。"), true); return; }
+    const assets = {};
+    for (const hash of new Set(templates.flatMap(tp => Object.keys(tp.images)))) {
+      const blob = await tplBlob(hash);
+      if (blob) assets[hash] = await blobToDataUrl(blob);
+    }
+    download(new Blob([JSON.stringify({ app: TPL_APP, version: 1, templates, assets })], { type: "application/json" }), `scene-templates-${stamp()}.json`);
+    status(t("テンプレートを {n} 件書き出しました（画像も入っています）。", { n: templates.length }));
+  }
+
+  async function importTemplates(file) {
+    let data;
+    try { data = JSON.parse(await file.text()); } catch (err) { status(t("テンプレートのファイルを読めませんでした。"), true); return; }
+    if (!data || data.app !== TPL_APP) { status(t("このツールのテンプレートのファイルではありません。"), true); return; }
+    for (const [hash, url] of Object.entries(data.assets || {})) {
+      try {
+        const blob = dataUrlBlob(url);
+        const real = R.hex(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()));
+        if (real === hash) await keepTplBlob(hash, blob);
+      } catch (err) { /* left out */ }
+    }
+    const incoming = M.normalizeTemplates(data.templates);
+    const known = new Set(templates.map(tp => tp.id));
+    let added = 0;
+    for (const tp of incoming) {
+      if (known.has(tp.id)) templates[templates.findIndex(x => x.id === tp.id)] = tp;
+      else { templates.push(tp); added++; }
+    }
+    saveTemplates();
+    renderTemplates();
+    status(t("テンプレートを {n} 件読み込みました。", { n: incoming.length }) + (incoming.length - added ? t("同じテンプレート {n} 件は置き換えました。", { n: incoming.length - added }) : ""));
+  }
+
+  function wireTemplates() {
+    $("#tplSave").addEventListener("click", saveAsTemplate);
+    $("#edTemplate").addEventListener("click", saveAsTemplate);
+    $("#tplExport").addEventListener("click", exportTemplates);
+    $("#tplImport").addEventListener("click", () => $("#tplFile").click());
+    $("#tplFile").addEventListener("change", ev => { const file = ev.target.files[0]; ev.target.value = ""; if (file) importTemplates(file); });
+    $("#solidAdd").addEventListener("click", async () => {
+      const color = $("#solidColor").value;
+      const blob = await solidBlob(color);
+      const ids = await addFiles([new File([blob], t("単色 {color}", { color }) + ".png", { type: "image/png" })]);
+      if (ids.length) { touch(); commit(); }
+    });
   }
 
   function wireRest() {
@@ -947,10 +1339,16 @@
     wireShelf();
     wireCommon();
     wireEditor();
+    wireMarkers();
+    wireTemplates();
     wireRest();
+    loadTemplates();
+    renderTemplates();
     touch();
     db = await openDb();
     await loadBlobs();
+    await seedTemplates();
+    renderTemplates();
     if (!db) status(t("このブラウザでは画像を保存できません。画像を入れたら「プロジェクトを保存」でファイルに残してください。"), true);
     touch();
     commit();

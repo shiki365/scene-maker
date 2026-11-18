@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <script src="i18n.v1.js"></script>
-<script src="lang.en.v1.js?v=2"></script>
-<script src="lang.ko.v1.js?v=2"></script>
+<script src="lang.en.v1.js?v=3"></script>
+<script src="lang.ko.v1.js?v=3"></script>
 <script src="theme.v1.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>シーンメーカー | ココフォリア</title>
@@ -232,6 +232,7 @@
   .inline { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
   .inline select { flex: 1 1 8em; width: auto; min-width: 0; }
   .inline input[type=number] { width: 5.5em; }
+  .inline input[type=color] { width: 44px; flex: none; }
   .grp { display: inline-flex; align-items: center; gap: 6px; } /* a label, its number and unit wrap together */
 
   .stack { display: grid; gap: 16px; min-width: 0; }
@@ -311,6 +312,40 @@
   .mode b { display: block; color: var(--fg); }
   .mode span { color: var(--muted); font-size: 12px; line-height: 1.6; }
   .mode .warn { color: var(--warn); }
+
+  /* Marker panels on the board sample. The other list (shared or this scene's) is drawn faded and cannot be grabbed. */
+  .board .mk { position: absolute; box-sizing: border-box; transform-origin: 50% 50%; touch-action: none; }
+  .board .mk.edit { cursor: move; }
+  .board .mk.edit:hover { outline: 1px dashed rgba(255,255,255,.7); }
+  .board .mk.other { opacity: .45; pointer-events: none; }
+  .board .mk.empty { background: rgba(255,255,255,.12); border: 1px dashed rgba(255,255,255,.55); }
+  .board .mk.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .board .mk:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .board .mk-h { position: absolute; right: -6px; bottom: -6px; width: 12px; height: 12px; background: var(--accent);
+                 border: 1px solid #000; border-radius: 2px; cursor: nwse-resize; }
+
+  /* The marker list and the editor of one marker. */
+  .markers { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--raised); }
+  .mk-head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; justify-content: space-between; }
+  .mk-title { color: var(--fg); font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+  .mk-list { display: grid; gap: 4px; max-height: 200px; overflow: auto; }
+  .mk-list .desc { margin: 0; }
+  .mk-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 4px 6px;
+            border: 1px solid var(--line); border-radius: 4px; background: var(--panel); cursor: pointer; }
+  .mk-row:hover { background: var(--control); }
+  .mk-row[aria-selected=true] { background: var(--pick); box-shadow: inset 2px 0 0 var(--accent); }
+  .mk-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .mk-pic { width: 32px; height: 24px; border-radius: 2px; background: repeating-conic-gradient(#1f2029 0% 25%, #16171d 0% 50%) 50% / 8px 8px;
+            background-size: contain, 8px 8px; background-repeat: no-repeat, repeat; background-position: center; }
+  .mk-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mk-where { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+  .mk-detail { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+
+  /* Templates. */
+  .tpl-list { display: grid; gap: 4px; margin-top: 8px; }
+  .tpl-list .desc { margin: 0; }
+  .tpl-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 5px; align-items: center; }
+  .tpl-row input[type=text] { min-height: 26px; padding: 2px 7px; }
 </style>
 </head>
 <body>
@@ -338,6 +373,8 @@
     <fieldset>
       <legend>画像の置き場（<span id="imageCount">0</span> 枚）</legend>
       <div class="gallery" id="gallery"></div>
+      <div class="inline" style="margin-top: 8px;"><input type="color" id="solidColor" value="#000000" aria-label="単色の画像の色"><button type="button" class="small" id="solidAdd">単色の画像を置き場に入れる</button></div>
+      <p class="desc">暗転（黒）や回想（白）のシーン、ボタン代わりのマーカーに使えます。1920 × 1080px の PNG です。</p>
     </fieldset>
 
     <fieldset>
@@ -354,6 +391,20 @@
       <div class="row"><label for="defFit">画像のはめ方</label>
         <div class="inline"><select id="defFit"><option value="fill">フィールドに合わせて伸ばす（標準）</option><option value="cover">形を保って、はみ出しを切る</option></select><button type="button" class="small" id="allFit">全シーンに</button></div></div>
       <p class="desc" data-i18n>ここの値は、これから追加するシーンの最初の値にもなります。フィールドの大きさの単位はマスで、ココフォリアの盤面では <b>1 マス = 24px</b> です（48 × 27 マス = 1152 × 648px）。「形を保って、はみ出しを切る」は、ココフォリアのフィールド設定の「画像を自動トリミングする」と同じです。</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>テンプレート</legend>
+      <p class="desc">よく使うシーンの形（区切り、暗転、マーカーの付いた場面など）を取っておいて、何度でも足せます。テンプレートはこのブラウザに保存され、ほかの部屋の作業でも使えます。</p>
+      <div class="tpl-list" id="tplList"></div>
+      <div class="btns" style="margin-top: 8px;">
+        <button type="button" class="small" id="tplSave">選んでいるシーンをテンプレートに</button>
+      </div>
+      <div class="btns" style="margin-top: 6px;">
+        <button type="button" class="small" id="tplExport">テンプレートを書き出す</button>
+        <button type="button" class="small" id="tplImport">テンプレートを読み込む</button>
+      </div>
+      <p class="desc">「足す」と、選んでいるシーンのすぐ下に入ります。書き出したファイルは、別の PC に移すときや、ほかの人と分け合うときに使えます。</p>
     </fieldset>
 
     <fieldset>
@@ -396,10 +447,41 @@
             <span class="inline"><span>横幅</span> <input type="number" id="edWidth" min="1" max="1000" step="1" aria-label="フィールドの横幅（マス）"> × <span>縦幅</span> <input type="number" id="edHeight" min="1" max="1000" step="1" aria-label="フィールドの縦幅（マス）">
               <button type="button" class="small" id="edSizeAuto">背景の形に合わせる</button></span></div>
           <div class="inline"><label class="check"><input type="checkbox" id="edGrid"> グリッドを表示</label>　<span class="grp"><span>間隔</span> <input type="number" id="edGridSize" min="1" max="1000" step="1" aria-label="グリッドの間隔（マス）"> <span>マス</span></span></div>
+          <div class="markers" id="markers">
+            <div class="mk-head"><span class="mk-title">マーカーパネル</span>
+              <span class="seg" id="mkMode" role="group" aria-label="置くマーカー"><button type="button" data-mk-mode="scene" aria-pressed="true">このシーン</button><button type="button" data-mk-mode="common" aria-pressed="false">全シーン共通</button></span></div>
+            <label class="check"><input type="checkbox" id="edUseCommon"> 全シーン共通のマーカーも、このシーンに付ける</label>
+            <div class="mk-list" id="mkList" role="listbox" aria-label="マーカーパネルの一覧"></div>
+            <div class="btns"><button type="button" class="small" id="mkAdd">＋ マーカー</button><button type="button" class="small" id="mkAddFile">＋ 画像からマーカー</button></div>
+            <div class="mk-detail" id="mkDetail" hidden>
+              <div class="two">
+                <label class="f">画像<span class="inline"><select id="mkImage"></select></span></label>
+                <label class="f">メモ（マウスを乗せると出る文字）<input type="text" id="mkText"></label>
+              </div>
+              <div class="inline">
+                <span class="grp"><span>位置</span> X <input type="number" id="mkX" min="-1000" max="1000" step="1" aria-label="マーカーの位置 X（マス）"> Y <input type="number" id="mkY" min="-1000" max="1000" step="1" aria-label="マーカーの位置 Y（マス）"></span>
+                <span class="grp"><span>横幅</span> <input type="number" id="mkW" min="1" max="1000" step="1" aria-label="マーカーの横幅（マス）"> <span>縦幅</span> <input type="number" id="mkH" min="1" max="1000" step="1" aria-label="マーカーの縦幅（マス）"></span>
+                <span class="grp"><span>角度</span> <input type="number" id="mkAngle" min="-360" max="360" step="1" aria-label="マーカーの角度（度）"></span>
+              </div>
+              <div class="inline"><label class="check"><input type="checkbox" id="mkLocked"> 配置固定</label>　<label class="check"><input type="checkbox" id="mkFreezed"> サイズ固定</label></div>
+              <div class="two">
+                <label class="f">クリックアクション<select id="mkClick"><option value="none">使用しない</option><option value="message">チャットに送信</option></select></label>
+                <label class="f" id="mkClickRow">送信する文<input type="text" id="mkClickValue"></label>
+              </div>
+              <div class="btns">
+                <button type="button" class="small" id="mkBack">後ろへ</button>
+                <button type="button" class="small" id="mkFront">前へ</button>
+                <button type="button" class="small" id="mkDup">複製</button>
+                <button type="button" class="small danger" id="mkDelete">このマーカーを削除</button>
+              </div>
+            </div>
+            <p class="desc">盤面の見本の上でドラッグして動かし、右下の角で大きさを変えます（マス単位。矢印キーでも 1 マスずつ動きます）。「全シーン共通」に切り替えると、全シーンに付くマーカーを置けます。チャットに送信は、クリックした人の発言として送られます。</p>
+          </div>
           <label class="f">シーン切替メッセージ（空でよい。入れると、シーンを反映したときにシーンタイトルの名前でメインに発言されます）<textarea id="edText"></textarea></label>
           <div class="warnline" id="edWarn" hidden></div>
           <div class="btns">
             <button type="button" class="small" id="edDup">複製</button>
+            <button type="button" class="small" id="edTemplate">テンプレートにする</button>
             <button type="button" class="small danger" id="edDelete">このシーンを削除</button>
           </div>
         </div>
@@ -435,7 +517,8 @@
         <h2>知っておいてほしいこと</h2>
         <ul>
           <li data-i18n><b>BGM・効果音は入れられません</b>（ルームデータに音声を入れる場所が無いため）。読み込んだあと、ココフォリアで盤面に BGM を付けて、シーンの「盤面を保存」を押してください</li>
-          <li>「上書き」で読み込み直すと、そのシーンにココフォリアで付けた BGM やマーカーパネルは消えます。BGM を付けたあとの手直しは、ココフォリアの中でするのがおすすめです</li>
+          <li>「上書き」で読み込み直すと、そのシーンにココフォリアで付けた BGM やマーカーパネルは消えます（このツールで置いたマーカーパネルは、もう一度入ります）。BGM を付けたあとの手直しは、ココフォリアの中でするのがおすすめです</li>
+          <li data-i18n>マーカーパネルは、シーンを反映したときに盤面に置かれます。<b>反映すると、盤面にあったマーカーパネルは、そのシーンのものに入れ替わります</b></li>
           <li>画像は 1 枚 5MB までです。超えると、ココフォリアに上がらないことがあります。静止画は縮小して書き出せます。動く画像（動く WebP・APNG・GIF）は、作ったツールで軽くしてください</li>
           <li data-i18n>画像は読み込んだときにココフォリアへアップロードされます（ルームデータの画像と同じ共有の置き場）。<b>ほかの人の素材を使うときは、その素材の利用規約の範囲で</b></li>
           <li>置き場の画像は、このブラウザの中にだけ保存されます（ブラウザのサイトデータを消すと消えます）。大事なものは「プロジェクトを保存」でファイルにも残してください</li>
@@ -450,6 +533,7 @@
 </main>
 
 <input type="file" id="projectFile" accept=".json,application/json" hidden>
+<input type="file" id="tplFile" accept=".json,application/json" hidden>
 <input type="file" id="imageFile" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
 <input type="file" id="sceneFiles" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
 <input type="file" id="shelfFiles" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
@@ -463,7 +547,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="roomdata.v1.js?v=2"></script>
-<script src="model.v1.js?v=2"></script>
-<script src="app.v1.js?v=4"></script>
+<script src="model.v1.js?v=3"></script>
+<script src="app.v1.js?v=5"></script>
 </body>
 </html>
