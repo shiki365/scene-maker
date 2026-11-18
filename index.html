@@ -286,8 +286,14 @@
   .empty-list { color: #9a9aa5; padding: 16px; text-align: center; font-size: 12px; }
 
   /* The board sample: the field at CCFOLIA's proportions (app.v1.js sizes .board to fit the stage). */
-  .stage { display: grid; place-items: center; height: 300px; min-height: 0; padding: 0; background: #2a2a2a; }
-  .board { position: relative; outline: 4px solid rgba(0,0,0,.2); }
+  .stage { display: block; height: 300px; min-height: 0; padding: 0; background: #2a2a2a; cursor: grab; touch-action: none; }
+  .stage.panning { cursor: grabbing; }
+  .board { position: absolute; z-index: 0; outline: 4px solid rgba(0,0,0,.2); }
+  /* Zoom and move the sample (markers may sit outside the field). Over the CCFOLIA sample: same colors in both themes. */
+  .view-ctl { position: absolute; top: 6px; right: 6px; z-index: 1; display: flex; gap: 3px; align-items: center; padding: 3px;
+    border-radius: 4px; background: rgba(16,16,20,.78); cursor: default; }
+  .view-ctl button { min-height: 24px; padding: 0 8px; font-size: 12px; }
+  .view-ctl output { min-width: 3.6em; text-align: center; color: #e9e9ee; font-family: var(--mono); font-size: 11px; }
   .board img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
   .board .grid { position: absolute; inset: 0; pointer-events: none; }
   .board .blank { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255,255,255,.62); font-size: 12px; }
@@ -435,7 +441,8 @@
           <p class="stage-note" style="margin-top: 6px;" data-i18n>ココフォリアのシーン一覧に近い見え方です。ココフォリアでは、前景のあるシーンの小さい絵は<b>前景だけ</b>になります（ここでは見分けやすいよう背景も重ねています）。ドラッグか ↑↓ で並べ替え。</p>
         </div>
         <div class="editor" id="editor" hidden>
-          <div class="stage" id="stage" aria-label="盤面の見本"><div class="board" id="board"></div></div>
+          <div class="stage" id="stage" aria-label="盤面の見本"><div class="board" id="board"></div>
+            <div class="view-ctl" role="group" aria-label="盤面の見本の表示"><button type="button" class="small" id="viewOut" aria-label="縮小" title="縮小（Ctrl＋ホイールでも）">−</button><output id="viewZoom">100%</output><button type="button" class="small" id="viewIn" aria-label="拡大" title="拡大（Ctrl＋ホイールでも）">＋</button><button type="button" class="small" id="viewFit" title="フィールドがちょうど入る大きさに戻す">フィールド</button><button type="button" class="small" id="viewAll" title="フィールドの外のマーカーも、全部が入るようにする">全体</button></div></div>
           <p class="stage-note" id="stageNote"></p>
           <div class="two">
             <label class="f">シーンタイトル<input type="text" id="edName" placeholder="空なら「新しいシーン」と出ます"></label>
@@ -475,7 +482,7 @@
                 <button type="button" class="small danger" id="mkDelete">このマーカーを削除</button>
               </div>
             </div>
-            <p class="desc">盤面の見本の上でドラッグして動かし、右下の角で大きさを変えます（マス単位。矢印キーでも 1 マスずつ動きます）。「全シーン共通」に切り替えると、全シーンに付くマーカーを置けます。チャットに送信は、クリックした人の発言として送られます。</p>
+            <p class="desc">盤面の見本の上でドラッグして動かし、右下の角で大きさを変えます（マス単位。矢印キーでも 1 マスずつ動きます）。フィールドの外にも置けます。盤面の見本は、右上のボタンか Ctrl＋ホイールで拡大・縮小し、空いた所をドラッグして見る場所を動かせます。「全シーン共通」に切り替えると、全シーンに付くマーカーを置けます。チャットに送信は、クリックした人の発言として送られます。</p>
           </div>
           <label class="f">シーン切替メッセージ（空でよい。入れると、シーンを反映したときにシーンタイトルの名前でメインに発言されます）<textarea id="edText"></textarea></label>
           <div class="warnline" id="edWarn" hidden></div>
@@ -542,12 +549,12 @@
   ブラウザだけで動く無料ツールです。作ったデータは自由に使えます。<br>
   <span data-i18n>ココフォリアのデータの形が変わると、読み込めなくなることがあります。いずれのサービスとも関係のない<strong>非公式</strong>のツールです。</span><br>
   <a href="https://shiki365.github.io/">ほかのツールも見る（shiki365 のツール置き場）</a> ・ <a href="https://shiki365.github.io/#contact">不具合の報告・感想</a> ・ <a href="https://marshmallow-qa.com/jisg2c3imbza76d">ほしいツールの要望（マシュマロ）</a> ・ <a href="https://sabunomisogi.booth.pm/items/8891048">開発を応援する（BOOTH）</a><br>
-  <span>v1.0</span> ・ <span>最終更新</span> 2026-11-17
+  <span>v1.0</span> ・ <span>最終更新</span> 2026-11-18
 </footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="roomdata.v1.js?v=2"></script>
 <script src="model.v1.js?v=3"></script>
-<script src="app.v1.js?v=5"></script>
+<script src="app.v1.js?v=6"></script>
 </body>
 </html>

@@ -542,17 +542,25 @@
     commit();
   }
 
+  // How the board sample is looked at: zoom (1 = the field just fits) and a shift from the middle, in px.
+  // Only a way of looking, so it is not part of the work (no undo, not saved).
+  const view = { zoom: 1, x: 0, y: 0 };
+  const VIEW_MIN = 0.1, VIEW_MAX = 8;
+  const fitScale = (sc, stage) => Math.min(Math.max(40, stage.clientWidth - 24) / (sc.width * M.CELL), Math.max(40, stage.clientHeight - 24) / (sc.height * M.CELL));
+
   function renderBoard() {
     const sc = sceneById(selected);
     const board = $("#board");
     board.textContent = "";
     if (!sc) return;
     const stage = $("#stage");
-    const availW = Math.max(40, stage.clientWidth - 24), availH = Math.max(40, stage.clientHeight - 24);
-    const scale = Math.min(availW / (sc.width * M.CELL), availH / (sc.height * M.CELL));
+    const scale = fitScale(sc, stage) * view.zoom;
     const w = sc.width * M.CELL * scale, h = sc.height * M.CELL * scale;
     board.style.width = w + "px";
     board.style.height = h + "px";
+    board.style.left = (stage.clientWidth - w) / 2 + view.x + "px";
+    board.style.top = (stage.clientHeight - h) / 2 + view.y + "px";
+    $("#viewZoom").textContent = Math.round(view.zoom * 100) + "%";
     const bg = bgOf(sc), fg = fgOf(sc);
     // CCFOLIA stacks two imgs of the field's size, both with object-fit = fieldObjectFit.
     for (const im of [bg, fg]) {
@@ -604,10 +612,12 @@
     el.style.transform = m.angle ? `rotate(${m.angle}deg)` : "";
   }
 
+  const shownMarkers = sc => (sc.useCommonMarkers || markerMode === "common" ? state.commonMarkers : []).concat(sc.markers);
+
   function drawMarkers(sc, board, cs) {
     board.dataset.cs = cs;
     const edited = markerList(sc);
-    const shown = (sc.useCommonMarkers || markerMode === "common" ? state.commonMarkers : []).concat(sc.markers);
+    const shown = shownMarkers(sc);
     shown.forEach((m, z) => {
       const editable = edited.includes(m);
       const el = document.createElement("div");
@@ -1100,6 +1110,68 @@
     });
   }
 
+  // Zooming and moving the board sample.
+  function wireView() {
+    const stage = $("#stage");
+    // Zoom by f, keeping the point (px, py) of the stage where it is.
+    const zoomAt = (f, px, py) => {
+      const z = Math.min(VIEW_MAX, Math.max(VIEW_MIN, view.zoom * f));
+      f = z / view.zoom;
+      const cx = stage.clientWidth / 2 + view.x, cy = stage.clientHeight / 2 + view.y;
+      view.x = px - (px - cx) * f - stage.clientWidth / 2;
+      view.y = py - (py - cy) * f - stage.clientHeight / 2;
+      view.zoom = z;
+      renderBoard();
+    };
+    const middle = f => zoomAt(f, stage.clientWidth / 2, stage.clientHeight / 2);
+    $("#viewIn").addEventListener("click", () => middle(1.25));
+    $("#viewOut").addEventListener("click", () => middle(1 / 1.25));
+    $("#viewFit").addEventListener("click", () => { Object.assign(view, { zoom: 1, x: 0, y: 0 }); renderBoard(); });
+    // The field and every marker shown on it, with a cell to spare.
+    $("#viewAll").addEventListener("click", () => {
+      const sc = sceneById(selected);
+      if (!sc) return;
+      const ox = Math.floor(sc.width / 2), oy = Math.floor(sc.height / 2);
+      let x0 = 0, y0 = 0, x1 = sc.width, y1 = sc.height;
+      for (const m of shownMarkers(sc)) {
+        x0 = Math.min(x0, m.x + ox); y0 = Math.min(y0, m.y + oy);
+        x1 = Math.max(x1, m.x + ox + m.width); y1 = Math.max(y1, m.y + oy + m.height);
+      }
+      x0 -= 1; y0 -= 1; x1 += 1; y1 += 1;
+      const s = Math.min(Math.max(40, stage.clientWidth - 24) / ((x1 - x0) * M.CELL), Math.max(40, stage.clientHeight - 24) / ((y1 - y0) * M.CELL));
+      view.zoom = Math.min(VIEW_MAX, Math.max(VIEW_MIN, s / fitScale(sc, stage)));
+      const scale = fitScale(sc, stage) * view.zoom;
+      view.x = -((x0 + x1) / 2 - sc.width / 2) * M.CELL * scale;
+      view.y = -((y0 + y1) / 2 - sc.height / 2) * M.CELL * scale;
+      renderBoard();
+    });
+    stage.addEventListener("wheel", ev => {
+      if (!ev.ctrlKey || !sceneById(selected)) return;
+      ev.preventDefault();
+      const r = stage.getBoundingClientRect();
+      zoomAt(Math.exp(-ev.deltaY * 0.0015), ev.clientX - r.left, ev.clientY - r.top);
+    }, { passive: false });
+    // Dragging where there is no marker moves the view.
+    let pan = null;
+    stage.addEventListener("pointerdown", ev => {
+      if ((ev.button !== 0 && ev.button !== 1) || ev.target.closest(".mk.edit, .view-ctl")) return;
+      ev.preventDefault();
+      stage.setPointerCapture(ev.pointerId);
+      stage.classList.add("panning");
+      pan = { x0: ev.clientX, y0: ev.clientY, vx: view.x, vy: view.y, left: parseFloat($("#board").style.left) || 0, top: parseFloat($("#board").style.top) || 0 };
+    });
+    stage.addEventListener("pointermove", ev => {
+      if (!pan) return;
+      const dx = ev.clientX - pan.x0, dy = ev.clientY - pan.y0;
+      view.x = pan.vx + dx; view.y = pan.vy + dy;
+      $("#board").style.left = pan.left + dx + "px";
+      $("#board").style.top = pan.top + dy + "px";
+    });
+    const stop = () => { pan = null; stage.classList.remove("panning"); };
+    stage.addEventListener("pointerup", stop);
+    stage.addEventListener("pointercancel", stop);
+  }
+
   // ---------------------------------------------------------------- templates
 
   const TPL_KEY = "ccf-scene-maker.templates", TPL_SEEDED = "ccf-scene-maker.templates-seeded", TPL_APP = "ccf-scene-maker-templates";
@@ -1340,6 +1412,7 @@
     wireCommon();
     wireEditor();
     wireMarkers();
+    wireView();
     wireTemplates();
     wireRest();
     loadTemplates();
