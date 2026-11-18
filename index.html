@@ -290,9 +290,13 @@
   .stage.panning { cursor: grabbing; }
   .board { position: absolute; z-index: 0; outline: 4px solid rgba(0,0,0,.2); }
   /* Zoom and move the sample (markers may sit outside the field). Over the CCFOLIA sample: same colors in both themes. */
-  .view-ctl { position: absolute; top: 6px; right: 6px; z-index: 1; display: flex; gap: 3px; align-items: center; padding: 3px;
+  .aid-grid { position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    background-image: linear-gradient(rgba(255,255,255,.16) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.16) 1px, transparent 1px); }
+  .aid-grid.fine { background-image: linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px); }
+  .view-ctl { position: absolute; top: 6px; right: 6px; z-index: 2; display: flex; gap: 3px; align-items: center; padding: 3px;
     border-radius: 4px; background: rgba(16,16,20,.78); cursor: default; }
   .view-ctl button { min-height: 24px; padding: 0 8px; font-size: 12px; }
+  .view-ctl button[aria-pressed=true] { background: var(--button); border-color: var(--button); color: var(--button-fg); }
   .view-ctl output { min-width: 3.6em; text-align: center; color: #e9e9ee; font-family: var(--mono); font-size: 11px; }
   .board img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
   .board .grid { position: absolute; inset: 0; pointer-events: none; }
@@ -438,11 +442,11 @@
       <div class="cols">
         <div>
           <div class="scene-list" id="sceneList" role="listbox" aria-label="シーン一覧（ココフォリアのシーン一覧の見本）"></div>
-          <p class="stage-note" style="margin-top: 6px;" data-i18n>ココフォリアのシーン一覧に近い見え方です。ココフォリアでは、前景のあるシーンの小さい絵は<b>前景だけ</b>になります（ここでは見分けやすいよう背景も重ねています）。ドラッグか ↑↓ で並べ替え。</p>
+          <p class="stage-note" style="margin-top: 6px;" data-i18n>ココフォリアのシーン一覧に近い見え方です。ココフォリアでは、前景のあるシーンの小さい絵は<b>前景だけ</b>になります。書き出しの「背景と前景を重ねた 1 枚を前景にする」（最初から付いています）で、ここと同じく背景も出ます。ドラッグか ↑↓ で並べ替え。</p>
         </div>
         <div class="editor" id="editor" hidden>
-          <div class="stage" id="stage" aria-label="盤面の見本"><div class="board" id="board"></div>
-            <div class="view-ctl" role="group" aria-label="盤面の見本の表示"><button type="button" class="small" id="viewOut" aria-label="縮小" title="縮小（Ctrl＋ホイールでも）">−</button><output id="viewZoom">100%</output><button type="button" class="small" id="viewIn" aria-label="拡大" title="拡大（Ctrl＋ホイールでも）">＋</button><button type="button" class="small" id="viewFit" title="フィールドがちょうど入る大きさに戻す">フィールド</button><button type="button" class="small" id="viewAll" title="フィールドの外のマーカーも、全部が入るようにする">全体</button></div></div>
+          <div class="stage" id="stage" aria-label="盤面の見本"><div class="board" id="board"></div><div class="aid-grid" id="aidGrid" hidden></div>
+            <div class="view-ctl" role="group" aria-label="盤面の見本の表示"><button type="button" class="small" id="viewOut" aria-label="縮小" title="縮小（Ctrl＋ホイールでも）">−</button><output id="viewZoom">100%</output><button type="button" class="small" id="viewIn" aria-label="拡大" title="拡大（Ctrl＋ホイールでも）">＋</button><button type="button" class="small" id="viewFit" title="フィールドがちょうど入る大きさに戻す">フィールド</button><button type="button" class="small" id="viewAll" title="フィールドの外のマーカーも、全部が入るようにする">全体</button><button type="button" class="small" id="viewGrid" aria-pressed="false" title="盤面の見本の全体に 1 マスごとの線を出す（見るためだけで、書き出しには入りません）">マス目</button></div></div>
           <p class="stage-note" id="stageNote"></p>
           <div class="two">
             <label class="f">シーンタイトル<input type="text" id="edName" placeholder="空なら「新しいシーン」と出ます"></label>
@@ -482,7 +486,7 @@
                 <button type="button" class="small danger" id="mkDelete">このマーカーを削除</button>
               </div>
             </div>
-            <p class="desc">盤面の見本の上でドラッグして動かし、右下の角で大きさを変えます（マス単位。矢印キーでも 1 マスずつ動きます）。フィールドの外にも置けます。盤面の見本は、右上のボタンか Ctrl＋ホイールで拡大・縮小し、空いた所をドラッグして見る場所を動かせます。「全シーン共通」に切り替えると、全シーンに付くマーカーを置けます。チャットに送信は、クリックした人の発言として送られます。</p>
+            <p class="desc">盤面の見本の上でドラッグして動かし、右下の角で大きさを変えます（マス単位。矢印キーでも 1 マスずつ動きます）。フィールドの外にも置けます。盤面の見本は、右上のボタンか Ctrl＋ホイールで拡大・縮小し、空いた所をドラッグして見る場所を動かせます。「マス目」で、フィールドの外まで 1 マスごとの線が出ます。「全シーン共通」に切り替えると、全シーンに付くマーカーを置けます。チャットに送信は、クリックした人の発言として送られます。</p>
           </div>
           <label class="f">シーン切替メッセージ（空でよい。入れると、シーンを反映したときにシーンタイトルの名前でメインに発言されます）<textarea id="edText"></textarea></label>
           <div class="warnline" id="edWarn" hidden></div>
@@ -503,6 +507,7 @@
         <label><input type="radio" name="exportMode" value="overwrite"><span data-i18n><b>前に入れたシーンを上書きする（手直し用）</b>前にこのツールで書き出して読み込んだシーンを、同じ場所で置き換えます（まだ無いシーンは追加）。<span class="warn">置き換わったシーンは、ココフォリアで付けた BGM・マーカーパネルも消えます。</span></span></label>
       </div>
       <label class="check"><input type="checkbox" id="optShrink"> 5MB を超える静止画は、縮小して書き出す（動く画像は縮小しません）</label>
+      <label class="check"><input type="checkbox" id="optBake"> 前景（枠）のあるシーンは、背景と前景を重ねた 1 枚を前景にする（ココフォリアのシーン一覧の小さい絵は前景だけなので、枠だけにならないように。盤面の見た目は変わりません。動く画像のシーンは重ねません）</label>
       <p class="summary" id="exportSummary"></p>
       <div class="btns">
         <button type="button" class="primary" id="exportZip" disabled>ルームデータ（ZIP）を書き出す</button>
@@ -554,7 +559,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="roomdata.v1.js?v=2"></script>
-<script src="model.v1.js?v=3"></script>
-<script src="app.v1.js?v=6"></script>
+<script src="model.v1.js?v=4"></script>
+<script src="app.v1.js?v=8"></script>
 </body>
 </html>

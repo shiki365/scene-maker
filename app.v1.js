@@ -342,6 +342,56 @@
     } finally { bmp.close(); }
   }
 
+  // The background with the foreground drawn over it, at the field's shape, both fitted the way CCFOLIA fits
+  // them (object-fit fill / cover, centered). Used as the foreground so the scene list shows the picture.
+  // -> { blob, type, bytes } or null when it cannot be made (an animated image, a missing one).
+  async function baked(sc, bg, fg, cache) {
+    if (!bg || !fg || bg.moving || fg.moving || !blobs.has(bg.id) || !blobs.has(fg.id)) return null;
+    const key = `bake:${bg.id}:${fg.id}:${sc.width}x${sc.height}:${sc.fit}`;
+    if (cache.has(key)) return cache.get(key);
+    const [b, f] = await Promise.all([createImageBitmap(blobs.get(bg.id)), createImageBitmap(blobs.get(fg.id))]);
+    try {
+      const aspect = sc.width / sc.height;
+      // Enough pixels for the larger of the two images, within 2560 px on the long side.
+      let w = Math.max(b.width, f.width, b.height * aspect, f.height * aspect), h = w / aspect;
+      const k = Math.min(1, 2560 / Math.max(w, h));
+      w = Math.max(1, Math.round(w * k)); h = Math.max(1, Math.round(h * k));
+      const canvas = document.createElement("canvas");
+      const draw = (scale) => {
+        canvas.width = Math.max(1, Math.round(w * scale));
+        canvas.height = Math.max(1, Math.round(h * scale));
+        const ctx = canvas.getContext("2d");
+        ctx.imageSmoothingQuality = "high";
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (const bmp of [b, f]) {
+          if (sc.fit === "cover") {
+            const s2 = Math.max(canvas.width / bmp.width, canvas.height / bmp.height);
+            const dw = bmp.width * s2, dh = bmp.height * s2;
+            ctx.drawImage(bmp, (canvas.width - dw) / 2, (canvas.height - dh) / 2, dw, dh);
+          } else ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+        }
+        return ctx;
+      };
+      const ctx = draw(1);
+      // Clear anywhere (a background with see-through parts) -> PNG; otherwise JPEG is far smaller.
+      const px = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let clear = false;
+      for (let i = 3; i < px.length; i += 4 * 7) if (px[i] < 255) { clear = true; break; }
+      const type = clear ? "image/png" : "image/jpeg";
+      const limit = MAX_IMAGE * 0.98;
+      for (let scale = 1, n = 0; n < 12; n++, scale *= 0.86) {
+        if (n) draw(scale);
+        const blob = await canvasBlob(canvas, type, 0.9);
+        if (blob && blob.size <= limit && R.EXT[blob.type]) {
+          const out = { blob, type: blob.type, bytes: new Uint8Array(await blob.arrayBuffer()), key };
+          cache.set(key, out);
+          return out;
+        }
+      }
+      return null;
+    } finally { b.close(); f.close(); }
+  }
+
   // ---------------------------------------------------------------- small builders
 
   function button(label, extra) {
@@ -544,7 +594,9 @@
 
   // How the board sample is looked at: zoom (1 = the field just fits) and a shift from the middle, in px.
   // Only a way of looking, so it is not part of the work (no undo, not saved).
-  const view = { zoom: 1, x: 0, y: 0 };
+  const view = { zoom: 1, x: 0, y: 0, grid: false };
+  const VIEW_GRID_KEY = "ccf-scene-maker.view-grid";
+  try { view.grid = localStorage.getItem(VIEW_GRID_KEY) === "1"; } catch (err) { /* not kept */ }
   const VIEW_MIN = 0.1, VIEW_MAX = 8;
   const fitScale = (sc, stage) => Math.min(Math.max(40, stage.clientWidth - 24) / (sc.width * M.CELL), Math.max(40, stage.clientHeight - 24) / (sc.height * M.CELL));
 
@@ -560,6 +612,7 @@
     board.style.height = h + "px";
     board.style.left = (stage.clientWidth - w) / 2 + view.x + "px";
     board.style.top = (stage.clientHeight - h) / 2 + view.y + "px";
+    placeAidGrid(M.CELL * scale);
     $("#viewZoom").textContent = Math.round(view.zoom * 100) + "%";
     const bg = bgOf(sc), fg = fgOf(sc);
     // CCFOLIA stacks two imgs of the field's size, both with object-fit = fieldObjectFit.
@@ -724,6 +777,7 @@
   function renderExport() {
     for (const el of document.querySelectorAll('input[name="exportMode"]')) el.checked = el.value === state.exportOpts.mode;
     $("#optShrink").checked = state.exportOpts.shrink;
+    $("#optBake").checked = state.exportOpts.bake;
     const used = state.images.filter(im => isUsed(im.id));
     const big = used.filter(im => tooBig(im) && !im.moving), bigMoving = used.filter(im => tooBig(im) && im.moving);
     const el = $("#exportSummary");
@@ -794,12 +848,20 @@
         if (!state.orderBase) state.orderBase = Math.floor(Date.now() / 1000);
       }
       const scenes = {};
+      const bakeCache = new Map();
+      let bakedN = 0, notBaked = 0;
       for (let i = 0; i < state.scenes.length; i++) {
         const sc = state.scenes[i];
         const markers = {};
         const list = M.markersOf(state, sc);
         for (let k = 0; k < list.length; k++) markers[list[k].id] = M.markerEntity(list[k], await file(imageById(list[k].imageId)), k + 1);
-        scenes[sc.ccfId] = M.toEntity(sc, await file(bgOf(sc)), await file(fgOf(sc)), state.orderBase + i, markers);
+        const bg = bgOf(sc), fg = fgOf(sc);
+        let fgFile = null;
+        if (state.exportOpts.bake && bg && fg) {
+          const one = await baked(sc, bg, fg, bakeCache);
+          if (one) { fgFile = R.image(one.type, one.bytes, one.key); bakedN++; } else notBaked++;
+        }
+        scenes[sc.ccfId] = M.toEntity(sc, await file(bg), fgFile || await file(fg), state.orderBase + i, markers);
       }
       const { zip, files } = await R.build({ scenes }, { JSZip: window.JSZip, subtle: crypto.subtle });
       // Images are already compressed; storing them keeps the export quick.
@@ -811,6 +873,8 @@
       exportStatus(t("書き出しました（シーン {n} 件・画像 {m} 枚・{size}）。", { n: state.scenes.length, m: files.length, size: sizeText(blob.size) })
         + (adding ? t("ココフォリアのルーム設定からインポートすると、シーン一覧の最後に追加されます。") : t("インポートすると、前に入れたシーンが置き換わります。"))
         + (small ? t("{n} 枚は 5MB 以下に縮小しました。", { n: small }) : "")
+        + (bakedN ? t("前景のある {n} シーンは、背景と前景を重ねた 1 枚を前景にしました（シーン一覧の小さい絵に背景も出ます）。", { n: bakedN }) : "")
+        + (notBaked ? t("動く画像を使っている {n} シーンは重ねていないので、シーン一覧の小さい絵は前景だけになります。", { n: notBaked }) : "")
         + (over ? t("5MB を超える画像が {n} 枚あり、ココフォリアに上がらないことがあります。", { n: over }) : ""), over > 0);
     } catch (err) {
       console.error(err);
@@ -1110,6 +1174,20 @@
     });
   }
 
+  // Lines every cell over the whole sample, the field's outside too (to place markers there). Only for looking.
+  function placeAidGrid(cs) {
+    const g = $("#aidGrid"), board = $("#board");
+    $("#viewGrid").setAttribute("aria-pressed", String(view.grid));
+    g.hidden = !view.grid || !sceneById(selected);
+    if (g.hidden) return;
+    cs = cs || Number(board.dataset.cs);
+    // Lines fall on the field's cells: its left / top edge is a line.
+    const x = parseFloat(board.style.left) || 0, y = parseFloat(board.style.top) || 0;
+    g.style.backgroundSize = `${cs}px ${cs}px`;
+    g.style.backgroundPosition = `${x}px ${y}px`;
+    g.classList.toggle("fine", cs < 6);
+  }
+
   // Zooming and moving the board sample.
   function wireView() {
     const stage = $("#stage");
@@ -1126,6 +1204,11 @@
     const middle = f => zoomAt(f, stage.clientWidth / 2, stage.clientHeight / 2);
     $("#viewIn").addEventListener("click", () => middle(1.25));
     $("#viewOut").addEventListener("click", () => middle(1 / 1.25));
+    $("#viewGrid").addEventListener("click", () => {
+      view.grid = !view.grid;
+      try { localStorage.setItem(VIEW_GRID_KEY, view.grid ? "1" : "0"); } catch (err) { /* not kept */ }
+      placeAidGrid();
+    });
     $("#viewFit").addEventListener("click", () => { Object.assign(view, { zoom: 1, x: 0, y: 0 }); renderBoard(); });
     // The field and every marker shown on it, with a cell to spare.
     $("#viewAll").addEventListener("click", () => {
@@ -1166,6 +1249,7 @@
       view.x = pan.vx + dx; view.y = pan.vy + dy;
       $("#board").style.left = pan.left + dx + "px";
       $("#board").style.top = pan.top + dy + "px";
+      placeAidGrid();
     });
     const stop = () => { pan = null; stage.classList.remove("panning"); };
     stage.addEventListener("pointerup", stop);
@@ -1362,6 +1446,7 @@
       el.addEventListener("change", () => { if (el.checked) { state.exportOpts.mode = el.value; touch({ keepGallery: true }); commit(); } });
     }
     $("#optShrink").addEventListener("change", ev => { state.exportOpts.shrink = ev.target.checked; touch({ keepGallery: true }); commit(); });
+    $("#optBake").addEventListener("change", ev => { state.exportOpts.bake = ev.target.checked; touch({ keepGallery: true }); commit(); });
     $("#exportZip").addEventListener("click", exportZip);
     $("#exportAssets").addEventListener("click", exportAssets);
 
