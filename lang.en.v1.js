@@ -278,4 +278,6 @@ I18n.add("en", {
 
   // ---- i18n.v1.js
   "訳の誤りを知らせる": "Report a translation error",
+  "<b>このツールは、2026年11月30日（月）で公開を終了します。</b>ルームデータを ZIP で書き出す機能（ルームデータのエクスポート）は、ココフォリアの有料プラン（CCFOLIA PRO）の機能です。このツールはそれと同じ形式のデータを無料で作れてしまうため、運営からのご連絡を受け、公式の有料機能に配慮して取り下げることにしました。これまでに作ったデータは、そのまま使えます。使ってくださった皆さま、ありがとうございました。":
+    "<b>This tool is available until November 30, 2026, and will then be withdrawn.</b> Exporting room data as a ZIP (Export room data) is a feature of CCFOLIA's paid plan, CCFOLIA PRO. Because this tool makes data in the same format for free, it is being withdrawn at the request of the CCFOLIA team, out of respect for this official paid feature. Data you have already made can still be used as is. Thank you to everyone who used it.",
 });

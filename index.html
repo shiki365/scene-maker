@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <script src="i18n.v1.js"></script>
-<script src="lang.en.v1.js?v=4"></script>
-<script src="lang.ko.v1.js?v=4"></script>
+<script src="lang.en.v1.js?v=5"></script>
+<script src="lang.ko.v1.js?v=5"></script>
 <script src="theme.v1.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>シーンメーカー | ココフォリア</title>
@@ -356,6 +356,10 @@
   .tpl-list .desc { margin: 0; }
   .tpl-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 5px; align-items: center; }
   .tpl-row input[type=text] { min-height: 26px; padding: 2px 7px; }
+  /* Withdrawal notice under the title (2026-11-24): the tool stays up until 2026-11-30, then stops. */
+  header p.ending { margin: 10px 0 0; padding: 8px 12px; border: 1px solid var(--warn); border-left-width: 4px;
+                    border-radius: 4px; color: var(--fg); font-size: 13px; }
+  header p.ending b { color: var(--warn); }
 </style>
 </head>
 <body>
@@ -370,6 +374,7 @@
   </div>
   <h1>シーンメーカー</h1>
   <p>背景の画像をまとめて入れると、ココフォリアの「シーン」を一括で作ります。全シーンに同じ前景（枠）を付ける、フィールドの大きさを画像の形に合わせる、5MB を超える画像を縮小する、までを済ませて、ルームデータ（ZIP）で書き出します。ココフォリアで読み込むだけで、シーン一覧に並びます。すべてブラウザの中だけで処理され、入れた画像がどこかに送られることはありません。</p>
+  <p class="ending" data-i18n><b>このツールは、2026年11月30日（月）で公開を終了します。</b>ルームデータを ZIP で書き出す機能（ルームデータのエクスポート）は、ココフォリアの有料プラン（CCFOLIA PRO）の機能です。このツールはそれと同じ形式のデータを無料で作れてしまうため、運営からのご連絡を受け、公式の有料機能に配慮して取り下げることにしました。これまでに作ったデータは、そのまま使えます。使ってくださった皆さま、ありがとうございました。</p>
 </header>
 
 <main>
@@ -555,7 +560,7 @@
   ブラウザだけで動く無料ツールです。作ったデータは、自分のルームで自由に使えます（書き出した ZIP をそのまま配布・販売するのは除きます）。<br>
   <span data-i18n>ココフォリアのデータの形が変わると、読み込めなくなることがあります。いずれのサービスとも関係のない<strong>非公式</strong>のツールです。</span><br>
   <a href="https://shiki365.github.io/">ほかのツールも見る（shiki365 のツール置き場）</a> ・ <a href="https://shiki365.github.io/#contact">不具合の報告・感想</a> ・ <a href="https://marshmallow-qa.com/jisg2c3imbza76d">ほしいツールの要望（マシュマロ）</a> ・ <a href="https://sabunomisogi.booth.pm/items/8891048">開発を応援する（BOOTH）</a><br>
-  <span>v1.1</span> ・ <span>最終更新</span> 2026-11-23
+  <span>v1.2</span> ・ <span>最終更新</span> 2026-11-24
 </footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
